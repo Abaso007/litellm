@@ -18,32 +18,32 @@ class MyCustomHandler(CustomLogger):
     previous_models: int = 0
 
     def log_pre_api_call(self, model, messages, kwargs): 
-        print(f"Pre-API Call")
+        print("Pre-API Call")
     
     def log_post_api_call(self, kwargs, response_obj, start_time, end_time): 
         print(f"Post-API Call - response object: {response_obj}; model: {kwargs['model']}")
 
     
     def log_stream_event(self, kwargs, response_obj, start_time, end_time):
-        print(f"On Stream")
+        print("On Stream")
     
     def async_log_stream_event(self, kwargs, response_obj, start_time, end_time):
-        print(f"On Stream")
+        print("On Stream")
         
     def log_success_event(self, kwargs, response_obj, start_time, end_time): 
         print(f"previous_models: {kwargs['litellm_params']['metadata']['previous_models']}")
         self.previous_models += len(kwargs["litellm_params"]["metadata"]["previous_models"]) # {"previous_models": [{"model": litellm_model_name, "exception_type": AuthenticationError, "exception_string": <complete_traceback>}]}
         print(f"self.previous_models: {self.previous_models}")
-        print(f"On Success")
+        print("On Success")
     
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time): 
         print(f"previous_models: {kwargs['litellm_params']['metadata']['previous_models']}")
         self.previous_models += len(kwargs["litellm_params"]["metadata"]["previous_models"]) # {"previous_models": [{"model": litellm_model_name, "exception_type": AuthenticationError, "exception_string": <complete_traceback>}]}
         print(f"self.previous_models: {self.previous_models}")
-        print(f"On Success")
+        print("On Success")
 
     def log_failure_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Failure")
+        print("On Failure")
 
 
 kwargs = {"model": "azure/gpt-3.5-turbo", "messages": [{"role": "user", "content":"Hey, how's it going?"}]}
@@ -202,13 +202,13 @@ async def test_async_fallbacks():
 
 # test_async_fallbacks()
 
-def test_dynamic_fallbacks_sync(): 
+def test_dynamic_fallbacks_sync():
     """
     Allow setting the fallback in the router.completion() call. 
     """
     try:
-          customHandler = MyCustomHandler()
-          litellm.callbacks = [customHandler]
+        customHandler = MyCustomHandler()
+        litellm.callbacks = [customHandler]
           model_list = [
             { # list of model deployments 
                 "model_name": "azure/gpt-3.5-turbo", # openai model name 
@@ -263,23 +263,24 @@ def test_dynamic_fallbacks_sync():
             }
         ]
 
-          router = Router(model_list=model_list, set_verbose=True)
-          kwargs = {}
-          kwargs["model"] = "azure/gpt-3.5-turbo"
-          kwargs["messages"] = [{"role": "user", "content": "Hey, how's it going?"}]
-          kwargs["fallbacks"] = [{"azure/gpt-3.5-turbo": ["gpt-3.5-turbo"]}]
-          response = router.completion(**kwargs)
-          print(f"response: {response}")
-          time.sleep(0.05) # allow a delay as success_callbacks are on a separate thread
-          assert customHandler.previous_models == 1 # 0 retries, 1 fallback
-          router.reset()
+        router = Router(model_list=model_list, set_verbose=True)
+        kwargs = {
+            "model": "azure/gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "Hey, how's it going?"}],
+            "fallbacks": [{"azure/gpt-3.5-turbo": ["gpt-3.5-turbo"]}],
+        }
+        response = router.completion(**kwargs)
+        print(f"response: {response}")
+        time.sleep(0.05) # allow a delay as success_callbacks are on a separate thread
+        assert customHandler.previous_models == 1 # 0 retries, 1 fallback
+        router.reset()
     except Exception as e:
         pytest.fail(f"An exception occurred - {e}")
 
 # test_dynamic_fallbacks_sync()
 
 @pytest.mark.asyncio
-async def test_dynamic_fallbacks_async(): 
+async def test_dynamic_fallbacks_async():
     """
     Allow setting the fallback in the router.completion() call. 
     """
@@ -342,14 +343,15 @@ async def test_dynamic_fallbacks_async():
         print()
         print()
         print()
-        print(f"STARTING DYNAMIC ASYNC")
+        print("STARTING DYNAMIC ASYNC")
         customHandler = MyCustomHandler()
         litellm.callbacks = [customHandler]
         router = Router(model_list=model_list, set_verbose=True)
-        kwargs = {}
-        kwargs["model"] = "azure/gpt-3.5-turbo"
-        kwargs["messages"] = [{"role": "user", "content": "Hey, how's it going?"}]
-        kwargs["fallbacks"] = [{"azure/gpt-3.5-turbo": ["gpt-3.5-turbo"]}]
+        kwargs = {
+            "model": "azure/gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "Hey, how's it going?"}],
+            "fallbacks": [{"azure/gpt-3.5-turbo": ["gpt-3.5-turbo"]}],
+        }
         response = await router.acompletion(**kwargs)
         print(f"RESPONSE: {response}")
         await asyncio.sleep(0.05) # allow a delay as success_callbacks are on a separate thread

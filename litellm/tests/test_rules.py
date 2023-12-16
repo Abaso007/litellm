@@ -12,17 +12,13 @@ from litellm import completion, acompletion
 def my_pre_call_rule(input: str): 
     print(f"input: {input}")
     print(f"INSIDE MY PRE CALL RULE, len(input) - {len(input)}")
-    if len(input) > 10: 
-        return False
-    return True
+    return len(input) <= 10
 
 def my_post_call_rule(input: str): 
     input = input.lower()
     print(f"input: {input}")
     print(f"INSIDE MY POST CALL RULE, len(input) - {len(input)}")
-    if "sorry" in input:
-        return False
-    return True
+    return "sorry" not in input
 
 ## Test 1: Pre-call rule 
 def test_pre_call_rule():
@@ -31,7 +27,7 @@ def test_pre_call_rule():
         ### completion  
         response = completion(model="gpt-3.5-turbo", 
                       messages=[{"role": "user", "content": "say something inappropriate"}])
-        pytest.fail(f"Completion call should have been failed. ")
+        pytest.fail("Completion call should have been failed. ")
     except: 
         pass
     ### async completion
@@ -40,9 +36,10 @@ def test_pre_call_rule():
         messages = [{"content": user_message, "role": "user"}]
         try:
             response = await acompletion(model="gpt-3.5-turbo", messages=messages)
-            pytest.fail(f"acompletion call should have been failed. ")
+            pytest.fail("acompletion call should have been failed. ")
         except Exception as e:
             pass
+
     asyncio.run(test_async_response())
     litellm.pre_call_rules = []
 

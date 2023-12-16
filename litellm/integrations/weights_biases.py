@@ -165,8 +165,7 @@ try:
                 )
                 for choice in choices
             ]
-            trace = self.results_to_trace_tree(request, response, results, time_elapsed)
-            return trace
+            return self.results_to_trace_tree(request, response, results, time_elapsed)
 except:
     imported_openAIResponse=False
 
@@ -196,7 +195,7 @@ class WeightsBiasesLogger:
     def log_event(self, kwargs, response_obj, start_time, end_time, print_verbose):
         # Method definition
         import wandb
-        
+
         try:
             print_verbose(
                 f"W&B Logging - Enters logging function for model {kwargs}"
@@ -216,4 +215,3 @@ class WeightsBiasesLogger:
         except:
             # traceback.print_exc()
             print_verbose(f"W&B Logging Layer Error - {traceback.format_exc()}")
-            pass

@@ -177,7 +177,7 @@ def completion(
     headers = validate_environment(api_key)
 
     ## Load Config
-    config = litellm.AlephAlphaConfig.get_config() 
+    config = litellm.AlephAlphaConfig.get_config()
     for k, v in config.items(): 
         if k not in optional_params: # completion(top_k=3) > aleph_alpha_config(top_k=3) <- allows for dynamic variables to be passed in
             optional_params[k] = v
@@ -188,21 +188,18 @@ def completion(
     if "control" in model:  # follow the ###Instruction / ###Response format
         for idx, message in enumerate(messages):
             if "role" in message:
-                if idx == 0:  # set first message as instruction (required), let later user messages be input
-                    prompt += f"###Instruction: {message['content']}"
+                if idx != 0 and message["role"] == "system" or idx == 0:
+                    prompt += (
+                        f"###Instruction: {message['content']}"
+                    )
+                elif message["role"] == "user":
+                    prompt += (
+                        f"###Input: {message['content']}"
+                    )
                 else:
-                    if message["role"] == "system":
-                        prompt += (
-                            f"###Instruction: {message['content']}"
-                        )
-                    elif message["role"] == "user":
-                        prompt += (
-                            f"###Input: {message['content']}"
-                        )
-                    else:
-                        prompt += (
-                            f"###Response: {message['content']}"
-                        )
+                    prompt += (
+                        f"###Response: {message['content']}"
+                    )
             else:
                 prompt += f"{message['content']}"
     else:
@@ -225,53 +222,52 @@ def completion(
     )
     if "stream" in optional_params and optional_params["stream"] == True:
         return response.iter_lines()
-    else:
-        ## LOGGING
-        logging_obj.post_call(
-                input=prompt,
-                api_key=api_key,
-                original_response=response.text,
-                additional_args={"complete_input_dict": data},
-            )
-        print_verbose(f"raw model_response: {response.text}")
-        ## RESPONSE OBJECT
-        completion_response = response.json()
-        if "error" in completion_response:
-            raise AlephAlphaError(
-                message=completion_response["error"],
-                status_code=response.status_code,
-            )
-        else:
-            try:
-                choices_list = []
-                for idx, item in enumerate(completion_response["completions"]):
-                    if len(item["completion"]) > 0:
-                        message_obj = Message(content=item["completion"])
-                    else: 
-                        message_obj = Message(content=None)
-                    choice_obj = Choices(finish_reason=item["finish_reason"], index=idx+1, message=message_obj)
-                    choices_list.append(choice_obj)
-                model_response["choices"] = choices_list
-            except:
-                raise AlephAlphaError(message=json.dumps(completion_response), status_code=response.status_code)
-
-        ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
-        prompt_tokens = len(
-            encoding.encode(prompt)
-        ) 
-        completion_tokens = len(
-            encoding.encode(model_response["choices"][0]["message"]["content"])
+    ## LOGGING
+    logging_obj.post_call(
+            input=prompt,
+            api_key=api_key,
+            original_response=response.text,
+            additional_args={"complete_input_dict": data},
         )
-
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
-        usage = Usage(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens
+    print_verbose(f"raw model_response: {response.text}")
+    ## RESPONSE OBJECT
+    completion_response = response.json()
+    if "error" in completion_response:
+        raise AlephAlphaError(
+            message=completion_response["error"],
+            status_code=response.status_code,
         )
-        model_response.usage = usage
-        return model_response
+    try:
+        choices_list = []
+        for idx, item in enumerate(completion_response["completions"]):
+            message_obj = (
+                Message(content=item["completion"])
+                if len(item["completion"]) > 0
+                else Message(content=None)
+            )
+            choice_obj = Choices(finish_reason=item["finish_reason"], index=idx+1, message=message_obj)
+            choices_list.append(choice_obj)
+        model_response["choices"] = choices_list
+    except:
+        raise AlephAlphaError(message=json.dumps(completion_response), status_code=response.status_code)
+
+    ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
+    prompt_tokens = len(
+        encoding.encode(prompt)
+    )
+    completion_tokens = len(
+        encoding.encode(model_response["choices"][0]["message"]["content"])
+    )
+
+    model_response["created"] = int(time.time())
+    model_response["model"] = model
+    usage = Usage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens
+    )
+    model_response.usage = usage
+    return model_response
 
 def embedding():
     # logic for parsing in - calling - parsing out model embedding calls

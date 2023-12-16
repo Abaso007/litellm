@@ -112,19 +112,19 @@ class AzureChatCompletion(BaseLLM):
         try:
 
             if model is None or messages is None:
-                raise AzureOpenAIError(status_code=422, message=f"Missing model or messages")
-            
+                raise AzureOpenAIError(status_code=422, message="Missing model or messages")
+
             max_retries = optional_params.pop("max_retries", 2)
 
             ### CHECK IF CLOUDFLARE AI GATEWAY ###
-            ### if so - set the model as part of the base url 
+            ### if so - set the model as part of the base url
             if "gateway.ai.cloudflare.com" in api_base: 
                 ## build base url - assume api base includes resource name
                 if client is None:
                     if not api_base.endswith("/"): 
                         api_base += "/"
                     api_base += f"{model}"
-                    
+
                     azure_client_params = {
                         "api_version": api_version,
                         "base_url": f"{api_base}",
@@ -137,11 +137,11 @@ class AzureChatCompletion(BaseLLM):
                     elif azure_ad_token is not None:
                         azure_client_params["azure_ad_token"] = azure_ad_token
 
-                    if acompletion is True:
+                    if acompletion:
                         client = AsyncAzureOpenAI(**azure_client_params)
                     else:
                         client = AzureOpenAI(**azure_client_params)
-                
+
                 data = {
                     "model": None,
                     "messages": messages, 
@@ -167,8 +167,8 @@ class AzureChatCompletion(BaseLLM):
                     "complete_input_dict": data,
                 },
             )
-            
-            if acompletion is True: 
+
+            if acompletion: 
                 if optional_params.get("stream", False):
                     return self.async_streaming(logging_obj=logging_obj, api_base=api_base, data=data, model=model, api_key=api_key, api_version=api_version, azure_ad_token=azure_ad_token, timeout=timeout, client=client)
                 else:
@@ -191,10 +191,7 @@ class AzureChatCompletion(BaseLLM):
                     azure_client_params["api_key"] = api_key
                 elif azure_ad_token is not None:
                     azure_client_params["azure_ad_token"] = azure_ad_token
-                if client is None:
-                    azure_client = AzureOpenAI(**azure_client_params)
-                else:
-                    azure_client = client
+                azure_client = AzureOpenAI(**azure_client_params) if client is None else client
                 response = azure_client.chat.completions.create(**data) # type: ignore
                 stringified_response = response.model_dump_json()
                 ## LOGGING
@@ -283,13 +280,14 @@ class AzureChatCompletion(BaseLLM):
             azure_client_params["api_key"] = api_key
         elif azure_ad_token is not None:
             azure_client_params["azure_ad_token"] = azure_ad_token
-        if client is None:
-            azure_client = AzureOpenAI(**azure_client_params)
-        else:
-            azure_client = client
+        azure_client = AzureOpenAI(**azure_client_params) if client is None else client
         response = azure_client.chat.completions.create(**data)
-        streamwrapper = CustomStreamWrapper(completion_stream=response, model=model, custom_llm_provider="azure",logging_obj=logging_obj)
-        return streamwrapper
+        return CustomStreamWrapper(
+            completion_stream=response,
+            model=model,
+            custom_llm_provider="azure",
+            logging_obj=logging_obj,
+        )
 
     async def async_streaming(self, 
                           logging_obj,
@@ -387,7 +385,7 @@ class AzureChatCompletion(BaseLLM):
             max_retries = data.pop("max_retries", 2)
             if not isinstance(max_retries, int): 
                 raise AzureOpenAIError(status_code=422, message="max retries must be an int")
-            
+
             # init AzureOpenAI Client
             azure_client_params = {
                 "api_version": api_version,
@@ -414,14 +412,17 @@ class AzureChatCompletion(BaseLLM):
                         }
                     },
                 )
-            
+
             if aembedding == True:
-                response =  self.aembedding(data=data, input=input, logging_obj=logging_obj, api_key=api_key, model_response=model_response, azure_client_params=azure_client_params)
-                return response
-            if client is None:
-                azure_client = AzureOpenAI(**azure_client_params) # type: ignore
-            else:
-                azure_client = client
+                return self.aembedding(
+                    data=data,
+                    input=input,
+                    logging_obj=logging_obj,
+                    api_key=api_key,
+                    model_response=model_response,
+                    azure_client_params=azure_client_params,
+                )
+            azure_client = AzureOpenAI(**azure_client_params) if client is None else client
             ## COMPLETION CALL            
             response = azure_client.embeddings.create(**data) # type: ignore
             ## LOGGING
@@ -438,8 +439,7 @@ class AzureChatCompletion(BaseLLM):
             exception_mapping_worked = True
             raise e
         except Exception as e: 
-            if exception_mapping_worked: 
+            if exception_mapping_worked:
                 raise e
-            else: 
-                import traceback
-                raise AzureOpenAIError(status_code=500, message=traceback.format_exc())
+            import traceback
+            raise AzureOpenAIError(status_code=500, message=traceback.format_exc())

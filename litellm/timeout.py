@@ -53,7 +53,7 @@ def timeout(timeout_duration: float = 0.0, exception_to_raise=Timeout):
                 result = future.result(timeout=local_timeout_duration)
             except futures.TimeoutError:
                 thread.stop_loop()
-                model = args[0] if len(args) > 0 else kwargs["model"]
+                model = args[0] if args else kwargs["model"]
                 raise exception_to_raise(
                     f"A timeout error occurred. The function call took longer than {local_timeout_duration} second(s).",
                     model=model, # [TODO]: replace with logic for parsing out llm provider from model name
@@ -75,16 +75,14 @@ def timeout(timeout_duration: float = 0.0, exception_to_raise=Timeout):
                 )
                 return value
             except asyncio.TimeoutError:
-                model = args[0] if len(args) > 0 else kwargs["model"]
+                model = args[0] if args else kwargs["model"]
                 raise exception_to_raise(
                     f"A timeout error occurred. The function call took longer than {local_timeout_duration} second(s).",
                     model=model, # [TODO]: replace with logic for parsing out llm provider from model name
                     llm_provider="openai"
                 )
 
-        if iscoroutinefunction(func):
-            return async_wrapper
-        return wrapper
+        return async_wrapper if iscoroutinefunction(func) else wrapper
 
     return decorator
 

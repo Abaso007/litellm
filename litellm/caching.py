@@ -39,18 +39,18 @@ class InMemoryCache(BaseCache):
             self.ttl_dict[key] = time.time() + kwargs["ttl"]
 
     def get_cache(self, key, **kwargs):
-        if key in self.cache_dict:
-            if key in self.ttl_dict:
-                if time.time() > self.ttl_dict[key]:
-                    self.cache_dict.pop(key, None)
-                    return None
-            original_cached_response = self.cache_dict[key]
-            try: 
-                cached_response = json.loads(original_cached_response)
-            except: 
-                cached_response = original_cached_response
-            return cached_response
-        return None
+        if key not in self.cache_dict:
+            return None
+        if key in self.ttl_dict:
+            if time.time() > self.ttl_dict[key]:
+                self.cache_dict.pop(key, None)
+                return None
+        original_cached_response = self.cache_dict[key]
+        try: 
+            cached_response = json.loads(original_cached_response)
+        except: 
+            cached_response = original_cached_response
+        return cached_response
     
     def flush_cache(self):
         self.cache_dict.clear()
@@ -215,7 +215,7 @@ class Cache:
         """
         cache_key = ""
         print_verbose(f"\nGetting Cache key. Kwargs: {kwargs}")
-        
+
         # for streaming, we use preset_cache_key. It's created in wrapper(), we do this because optional params like max_tokens, get transformed for bedrock -> max_new_tokens
         if kwargs.get("litellm_params", {}).get("preset_cache_key", None) is not None:
             print_verbose(f"\nReturning preset cache key: {cache_key}")
@@ -224,9 +224,9 @@ class Cache:
         # sort kwargs by keys, since model: [gpt-4, temperature: 0.2, max_tokens: 200] == [temperature: 0.2, max_tokens: 200, model: gpt-4]
         completion_kwargs = ["model", "messages", "temperature", "top_p", "n", "stop", "max_tokens", "presence_penalty", "frequency_penalty", "logit_bias", "user", "response_format", "seed", "tools", "tool_choice"]
         embedding_only_kwargs = ["input", "encoding_format"] # embedding kwargs = model, input, user, encoding_format. Model, user are checked in completion_kwargs
-        
+
         # combined_kwargs - NEEDS to be ordered across get_cache_key(). Do not use a set()
-        combined_kwargs = completion_kwargs + embedding_only_kwargs 
+        combined_kwargs = completion_kwargs + embedding_only_kwargs
         for param in combined_kwargs:
             # ignore litellm params here
             if param in kwargs:
@@ -239,8 +239,7 @@ class Cache:
                     if metadata is not None:
                         model_group = metadata.get("model_group")
                         model_group = metadata.get("model_group", None)
-                        caching_groups = metadata.get("caching_groups", None)
-                        if caching_groups:
+                        if caching_groups := metadata.get("caching_groups", None):
                             for group in caching_groups: 
                                 if model_group in group: 
                                     caching_group = group
@@ -249,16 +248,17 @@ class Cache:
                         metadata = litellm_params.get("metadata", None)
                         if metadata is not None:
                             model_group = metadata.get("model_group", None)
-                            caching_groups = metadata.get("caching_groups", None)
-                            if caching_groups:
+                            if caching_groups := metadata.get(
+                                "caching_groups", None
+                            ):
                                 for group in caching_groups: 
                                     if model_group in group: 
                                         caching_group = group
                                         break
                     param_value = caching_group or model_group or kwargs[param] # use caching_group, if set then model_group if it exists, else use kwargs["model"]
+                elif kwargs[param] is None:
+                    continue # ignore None params
                 else:
-                    if kwargs[param] is None:
-                        continue # ignore None params
                     param_value = kwargs[param]
                 cache_key+= f"{str(param)}: {str(param_value)}"
         print_verbose(f"\nCreated cache key: {cache_key}")
@@ -287,8 +287,7 @@ class Cache:
             else:
                 cache_key = self.get_cache_key(*args, **kwargs)
             if cache_key is not None:
-                cached_result = self.cache.get_cache(cache_key)
-                return cached_result
+                return self.cache.get_cache(cache_key)
         except Exception as e:
             logging.debug(f"An exception occurred: {traceback.format_exc()}")
             return None
@@ -316,7 +315,6 @@ class Cache:
         except Exception as e:
             print_verbose(f"LiteLLM Cache: Excepton add_cache: {str(e)}")
             traceback.print_exc()
-            pass
 
     async def _async_add_cache(self, result, *args, **kwargs):
         self.add_cache(result, *args, **kwargs)

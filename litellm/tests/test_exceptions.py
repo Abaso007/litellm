@@ -47,9 +47,9 @@ def test_context_window(model):
         response = completion(model=model, messages=messages)
         print(f"response: {response}")
         print("FAILED!")
-        pytest.fail(f"An exception occurred")
+        pytest.fail("An exception occurred")
     except ContextWindowExceededError as e:
-        print(f"Worked!")
+        print("Worked!")
     except RateLimitError:
         print("RateLimited!")
     except Exception as e: 
@@ -74,7 +74,7 @@ def invalid_auth(model):  # set the model key to an invalid key, depending on th
     messages = [{"content": "Hello, how are you?", "role": "user"}]
     temporary_key = None
     try:
-        if model == "gpt-3.5-turbo" or model == "gpt-3.5-turbo-instruct":
+        if model in ["gpt-3.5-turbo", "gpt-3.5-turbo-instruct"]:
             temporary_key = os.environ["OPENAI_API_KEY"]
             os.environ["OPENAI_API_KEY"] = "bad-key"
         elif "bedrock" in model:

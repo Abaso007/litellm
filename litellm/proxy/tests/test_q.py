@@ -47,12 +47,13 @@ job_response = requests.post(
     json={
         'model': 'gpt-3.5-turbo',
         'messages': [
-            {'role': 'system', 'content': f'You are a helpful assistant. What is your name'},
+            {
+                'role': 'system',
+                'content': 'You are a helpful assistant. What is your name',
+            }
         ],
     },
-    headers={
-        "Authorization": f"Bearer {generated_key}"
-    }
+    headers={"Authorization": f"Bearer {generated_key}"},
 )
 print(job_response.status_code)
 print(job_response.text)
@@ -60,7 +61,7 @@ print("\nResponse from creating job", job_response.text)
 job_response = job_response.json()
 job_id = job_response["id"] # type: ignore 
 polling_url = job_response["url"] # type: ignore 
-polling_url = f"{base_url}{polling_url}" 
+polling_url = f"{base_url}{polling_url}"
 print("\nCreated Job, Polling Url", polling_url)
 
 # Step 3: Poll the request

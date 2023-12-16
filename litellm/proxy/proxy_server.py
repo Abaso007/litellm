@@ -225,8 +225,7 @@ def usage_telemetry(
 
 def _get_bearer_token(api_key: str): 
     assert api_key.startswith("Bearer ") # ensure Bearer token passed in
-    api_key = api_key.replace("Bearer ", "") # extract the token
-    return api_key
+    return api_key.replace("Bearer ", "")
 
 def _get_pydantic_json_dict(pydantic_obj: BaseModel) -> dict: 
     try:
@@ -244,29 +243,29 @@ async def user_api_key_auth(request: Request, api_key: str = fastapi.Security(ap
         if user_custom_auth:
             response = await user_custom_auth(request=request, api_key=api_key)
             return UserAPIKeyAuth.model_validate(response)
-        
+
         if master_key is None:
             if isinstance(api_key, str):
                 return UserAPIKeyAuth(api_key=api_key)
             else:
                 return UserAPIKeyAuth()
-            
+
         if api_key is None: # only require api key if master key is set
-            raise Exception(f"No api key passed in.")
+            raise Exception("No api key passed in.")
 
         route: str = request.url.path
 
-        # note: never string compare api keys, this is vulenerable to a time attack. Use secrets.compare_digest instead
-        is_master_key_valid = secrets.compare_digest(api_key, master_key)
-        if is_master_key_valid:
+        if is_master_key_valid := secrets.compare_digest(api_key, master_key):
             return UserAPIKeyAuth(api_key=master_key)
-        
-        if route.startswith("/key/") and not is_master_key_valid:
-            raise Exception(f"If master key is set, only master key can be used to generate, delete, update or get info for new keys")
+
+        if route.startswith("/key/"):
+            raise Exception(
+                "If master key is set, only master key can be used to generate, delete, update or get info for new keys"
+            )
 
         if prisma_client is None: # if both master key + user key submitted, and user key != master key, and no db connected, raise an error
             raise Exception("No connected db.")
-        
+
         ## check for cache hit (In-Memory Cache)
         valid_token = user_api_key_cache.get_cache(key=api_key)
         print(f"valid_token from cache: {valid_token}")
@@ -276,36 +275,35 @@ async def user_api_key_auth(request: Request, api_key: str = fastapi.Security(ap
             valid_token = await prisma_client.get_data(token=api_key, expires=datetime.utcnow())
             print(f"valid token from prisma: {valid_token}")
             user_api_key_cache.set_cache(key=api_key, value=valid_token, ttl=60)
-        elif valid_token is not None: 
-            print(f"API Key Cache Hit!")
-        if valid_token:
-            litellm.model_alias_map = valid_token.aliases
-            config = valid_token.config
-            if config != {}:
-                model_list = config.get("model_list", [])
-                llm_model_list =  model_list
-                print("\n new llm router model list", llm_model_list)
-            if len(valid_token.models) == 0: # assume an empty model list means all models are allowed to be called
-                api_key = valid_token.token
-                valid_token_dict = _get_pydantic_json_dict(valid_token)
-                valid_token_dict.pop("token", None)
-                return UserAPIKeyAuth(api_key=api_key, **valid_token_dict)
-            else: 
-                try:
-                    data = await request.json()
-                except json.JSONDecodeError:
-                    data = {}  # Provide a default value, such as an empty dictionary
-                model = data.get("model", None)
-                if model in litellm.model_alias_map:
-                    model = litellm.model_alias_map[model]
-                if model and model not in valid_token.models:
-                    raise Exception(f"Token not allowed to access model")
+        else:
+            print("API Key Cache Hit!")
+        if not valid_token:
+            raise Exception("Invalid token")
+        litellm.model_alias_map = valid_token.aliases
+        config = valid_token.config
+        if config != {}:
+            model_list = config.get("model_list", [])
+            llm_model_list =  model_list
+            print("\n new llm router model list", llm_model_list)
+        if len(valid_token.models) == 0: # assume an empty model list means all models are allowed to be called
             api_key = valid_token.token
             valid_token_dict = _get_pydantic_json_dict(valid_token)
             valid_token_dict.pop("token", None)
             return UserAPIKeyAuth(api_key=api_key, **valid_token_dict)
         else: 
-            raise Exception(f"Invalid token")
+            try:
+                data = await request.json()
+            except json.JSONDecodeError:
+                data = {}  # Provide a default value, such as an empty dictionary
+            model = data.get("model", None)
+            if model in litellm.model_alias_map:
+                model = litellm.model_alias_map[model]
+            if model and model not in valid_token.models:
+                raise Exception("Token not allowed to access model")
+        api_key = valid_token.token
+        valid_token_dict = _get_pydantic_json_dict(valid_token)
+        valid_token_dict.pop("token", None)
+        return UserAPIKeyAuth(api_key=api_key, **valid_token_dict)
     except Exception as e: 
         print(f"An exception occurred - {traceback.format_exc()}")
         if isinstance(e, HTTPException): 
@@ -327,9 +325,9 @@ def prisma_setup(database_url: Optional[str]):
             print("Error when initializing prisma, Ensure you run pip install prisma", e)
 
 def load_from_azure_key_vault(use_azure_key_vault: bool = False): 
-    if use_azure_key_vault is False:
+    if not use_azure_key_vault:
         return
-    
+
     try: 
         from azure.keyvault.secrets import SecretClient
         from azure.identity import ClientSecretCredential
@@ -348,10 +346,12 @@ def load_from_azure_key_vault(use_azure_key_vault: bool = False):
 
             # Create the SecretClient using the credential
             client = SecretClient(vault_url=KVUri, credential=credential)
-        
+
             litellm.secret_manager_client = client
         else: 
-            raise Exception(f"Missing KVUri or client_id or client_secret or tenant_id from environment")
+            raise Exception(
+                "Missing KVUri or client_id or client_secret or tenant_id from environment"
+            )
     except Exception as e: 
         print("Error when loading keys from Azure Key Vault. Ensure you run `pip install azure-identity azure-keyvault-secrets`")
 
@@ -397,10 +397,7 @@ async def update_prisma_database(token, response_cost):
         # Fetch the existing cost for the given token
         existing_spend_obj = await prisma_client.get_data(token=token)
         print(f"existing spend: {existing_spend_obj}")
-        if existing_spend_obj is None: 
-            existing_spend = 0
-        else:
-            existing_spend = existing_spend_obj.spend
+        existing_spend = 0 if existing_spend_obj is None else existing_spend_obj.spend
         # Calculate the new cost by adding the existing cost and response_cost
         new_spend = existing_spend + response_cost
 
@@ -409,7 +406,6 @@ async def update_prisma_database(token, response_cost):
         await prisma_client.update_data(token=token, data={"spend": new_spend})
     except Exception as e:
         print(f"Error updating Prisma database: {traceback.format_exc()}")
-        pass
 
 def run_ollama_serve():
     try:
@@ -444,24 +440,21 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
     global master_key, user_config_file_path, otel_logging, user_custom_auth, user_custom_auth_path, use_background_health_checks, health_check_interval, use_queue
     config = {}
     try: 
-        if os.path.exists(config_file_path):
-            user_config_file_path = config_file_path
-            with open(config_file_path, 'r') as file:
-                config = yaml.safe_load(file)
-        else:
+        if not os.path.exists(config_file_path):
             raise Exception(f"Path to config does not exist, Current working directory: {os.getcwd()}, 'os.path.exists({config_file_path})' returned False")
+        user_config_file_path = config_file_path
+        with open(config_file_path, 'r') as file:
+            config = yaml.safe_load(file)
     except Exception as e:
         raise Exception(f"Exception while reading Config: {e}")
-    
+
     ## PRINT YAML FOR CONFIRMING IT WORKS 
     printed_yaml = copy.deepcopy(config)
     printed_yaml.pop("environment_variables", None)
 
     print_verbose(f"Loaded config YAML (api_key and environment_variables are not shown):\n{json.dumps(printed_yaml, indent=2)}")
 
-    ## ENVIRONMENT VARIABLES
-    environment_variables = config.get('environment_variables', None)
-    if environment_variables: 
+    if environment_variables := config.get('environment_variables', None):
         for key, value in environment_variables.items(): 
             os.environ[key] = value
 
@@ -474,13 +467,12 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
         blue_color_code = "\033[94m"
         reset_color_code = "\033[0m"
         for key, value in litellm_settings.items(): 
+            if key == "cache_params":
+                continue
             if key == "cache":
                 print(f"{blue_color_code}\nSetting Cache on Proxy")
                 from litellm.caching import Cache
-                if isinstance(value, dict):
-                    cache_type = value.get("type", "redis")
-                else:
-                    cache_type = "redis" # default to using redis on cache
+                cache_type = value.get("type", "redis") if isinstance(value, dict) else "redis"
                 cache_responses = True
                 cache_host = litellm.get_secret("REDIS_HOST", None)
                 cache_port = litellm.get_secret("REDIS_PORT", None)
@@ -518,7 +510,7 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
                 print(f"litellm.post_call_rules: {litellm.post_call_rules}")
             elif key == "success_callback":
                 litellm.success_callback = []
-                
+
                 # intialize success callbacks
                 for callback in value:
                     # user passed custom_callbacks.async_on_succes_logger. They need us to import a function
@@ -534,7 +526,7 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
                 print_verbose(f"{blue_color_code} Initialized Success Callbacks - {litellm.success_callback} {reset_color_code}")
             elif key == "failure_callback":
                 litellm.failure_callback = []
-                
+
                 # intialize success callbacks
                 for callback in value:
                     # user passed custom_callbacks.async_on_succes_logger. They need us to import a function
@@ -544,10 +536,6 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
                     else:
                         litellm.failure_callback.append(callback)
                 print_verbose(f"{blue_color_code} Initialized Success Callbacks - {litellm.failure_callback} {reset_color_code}")
-            elif key == "cache_params":
-                # this is set in the cache branch
-                # see usage here: https://docs.litellm.ai/docs/proxy/caching
-                pass
             else:
                 setattr(litellm, key, value)
 
@@ -578,9 +566,7 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
         otel_logging =  general_settings.get("otel", False)
         if otel_logging == True:
             print("\nOpenTelemetry Logging Activated")
-        ### CUSTOM API KEY AUTH ###
-        custom_auth = general_settings.get("custom_auth", None)
-        if custom_auth:
+        if custom_auth := general_settings.get("custom_auth", None):
             user_custom_auth = get_instance_fn(value=custom_auth, config_file_path=config_file_path)
         ### BACKGROUND HEALTH CHECKS ###
         # Enable background health checks
@@ -602,7 +588,7 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
             litellm_model_api_base = model["litellm_params"].get("api_base", None)
             if "ollama" in litellm_model_name and litellm_model_api_base is None: 
                 run_ollama_serve()
-    
+
     ## ROUTER SETTINGS (e.g. routing_strategy, ...)
     router_settings = config.get("router_settings", None)
     if router_settings and isinstance(router_settings, dict):
@@ -620,7 +606,7 @@ def load_router_config(router: Optional[litellm.Router], config_file_path: str):
         for k, v in router_settings.items(): 
             if k in available_args: 
                 router_params[k] = v
-    
+
     router = litellm.Router(**router_params) # type:ignore
     return router, model_list, general_settings
 
@@ -628,11 +614,13 @@ async def generate_key_helper_fn(duration: Optional[str], models: list, aliases:
     global prisma_client
 
     if prisma_client is None: 
-        raise Exception(f"Connect Proxy to database to generate keys - https://docs.litellm.ai/docs/proxy/virtual_keys ")
-    
+        raise Exception(
+            "Connect Proxy to database to generate keys - https://docs.litellm.ai/docs/proxy/virtual_keys "
+        )
+
     if token is None:
         token = f"sk-{secrets.token_urlsafe(16)}"
-    
+
 
     def _duration_in_seconds(duration: str): 
         match = re.match(r"(\d+)([smhd]?)", duration)
@@ -652,13 +640,13 @@ async def generate_key_helper_fn(duration: Optional[str], models: list, aliases:
             return value * 86400
         else:
             raise ValueError("Unsupported duration unit")
-        
+
     if duration is None: # allow tokens that never expire 
         expires = None
     else: 
         duration_s = _duration_in_seconds(duration=duration)
         expires = datetime.utcnow() + timedelta(seconds=duration_s)
-    
+
     aliases_json = json.dumps(aliases)
     config_json = json.dumps(config)
     user_id = user_id or str(uuid.uuid4())
@@ -760,8 +748,6 @@ def initialize(
     if max_budget:  # litellm-specific param
         litellm.max_budget = max_budget
         dynamic_config["general"]["max_budget"] = max_budget
-    if experimental: 
-        pass
     user_telemetry = telemetry
     usage_telemetry(feature="local_proxy_server")
     curl_command = """
@@ -807,8 +793,7 @@ def get_litellm_model_info(model: dict = {}):
     try:
         if "azure" in model_to_lookup:
             model_to_lookup = model_info.get("base_model", None)
-        litellm_model_info = litellm.get_model_info(model_to_lookup)
-        return litellm_model_info
+        return litellm.get_model_info(model_to_lookup)
     except:
         # this should not block returning on /model/info
         # if litellm does not have info on the model it should return {}
@@ -983,11 +968,9 @@ async def chat_completion(request: Request, model: Optional[str] = None, user_ap
         if "metadata" in data:
             print(f'received metadata: {data["metadata"]}')
             data["metadata"]["user_api_key"] = user_api_key_dict.api_key
-            data["metadata"]["headers"] = dict(request.headers)
         else:
             data["metadata"] = {"user_api_key": user_api_key_dict.api_key}
-            data["metadata"]["headers"] = dict(request.headers)
-        
+        data["metadata"]["headers"] = dict(request.headers)
         global user_temperature, user_request_timeout, user_max_tokens, user_api_base
         # override with user settings, these are params passed via cli
         if user_temperature: 
@@ -1012,15 +995,15 @@ async def chat_completion(request: Request, model: Optional[str] = None, user_ap
             response = await llm_router.acompletion(**data)
         else: # router is not set
             response = await litellm.acompletion(**data)
-        
+
         print(f"final response: {response}")
         if 'stream' in data and data['stream'] == True: # use generate_responses to stream responses
             return StreamingResponse(async_data_generator(user_api_key_dict=user_api_key_dict, response=response), media_type='text/event-stream')
-        
+
         background_tasks.add_task(log_input_output, request, response) # background task for logging to OTEL 
         return response
     except Exception as e:
-        await proxy_logging_obj.post_call_failure_hook(user_api_key_dict=user_api_key_dict, original_exception=e) 
+        await proxy_logging_obj.post_call_failure_hook(user_api_key_dict=user_api_key_dict, original_exception=e)
         print(f"\033[1;31mAn error occurred: {e}\n\n Debug this by setting `--debug`, e.g. `litellm --model gpt-3.5-turbo --debug`")
         router_model_names = [m["model_name"] for m in llm_model_list] if llm_model_list is not None else []
         if llm_router is not None and data.get("model", "") in router_model_names: 
@@ -1037,20 +1020,19 @@ async def chat_completion(request: Request, model: Optional[str] = None, user_ap
                 print(f"{key}: {value}")
         if user_debug: 
             traceback.print_exc()
-        
+
         if isinstance(e, HTTPException):
             raise e
-        else:
-            error_traceback = traceback.format_exc()
-            error_msg = f"{str(e)}\n\n{error_traceback}"
-            try:
-                status = e.status_code # type: ignore
-            except:
-                status = 500
-            raise HTTPException(
-                status_code=status,
-                detail=error_msg
-            )
+        error_traceback = traceback.format_exc()
+        error_msg = f"{str(e)}\n\n{error_traceback}"
+        try:
+            status = e.status_code # type: ignore
+        except:
+            status = 500
+        raise HTTPException(
+            status_code=status,
+            detail=error_msg
+        )
 
 @router.post("/v1/embeddings", dependencies=[Depends(user_api_key_auth)], response_class=ORJSONResponse)
 @router.post("/embeddings", dependencies=[Depends(user_api_key_auth)], response_class=ORJSONResponse)
@@ -1061,7 +1043,6 @@ async def embeddings(request: Request, user_api_key_dict: UserAPIKeyAuth = Depen
         body = await request.body()
         data = orjson.loads(body)
 
-         # Include original request and headers in the data
         data["proxy_server_request"] = {
             "url": str(request.url),
             "method": request.method,
@@ -1081,26 +1062,29 @@ async def embeddings(request: Request, user_api_key_dict: UserAPIKeyAuth = Depen
             data["model"] = user_model
         if "metadata" in data:
             data["metadata"]["user_api_key"] = user_api_key_dict.api_key
-            data["metadata"]["headers"] = dict(request.headers)
         else:
             data["metadata"] = {"user_api_key": user_api_key_dict.api_key}
-            data["metadata"]["headers"] = dict(request.headers)
+        data["metadata"]["headers"] = dict(request.headers)
         router_model_names = [m["model_name"] for m in llm_model_list] if llm_model_list is not None else []
         if "input" in data and isinstance(data['input'], list) and isinstance(data['input'][0], list) and isinstance(data['input'][0][0], int): # check if array of tokens passed in
             # check if non-openai/azure model called - e.g. for langchain integration
             if llm_model_list is not None and data["model"] in router_model_names: 
                 for m in llm_model_list: 
-                    if m["model_name"] == data["model"] and (m["litellm_params"]["model"] in litellm.open_ai_embedding_models 
-                                                             or m["litellm_params"]["model"].startswith("azure/")):
-                        pass
-                    else: 
-                        # non-openai/azure embedding model called with token input
-                        input_list = []
-                        for i in data["input"]: 
-                            input_list.append(litellm.decode(model="gpt-3.5-turbo", tokens=i))
+                    if (
+                        m["model_name"] != data["model"]
+                        or m["litellm_params"]["model"]
+                        not in litellm.open_ai_embedding_models
+                        and not m["litellm_params"]["model"].startswith(
+                            "azure/"
+                        )
+                    ):
+                        input_list = [
+                            litellm.decode(model="gpt-3.5-turbo", tokens=i)
+                            for i in data["input"]
+                        ]
                         data["input"] = input_list
                         break
-        
+
         ### CALL HOOKS ### - modify incoming data / reject request before calling the model
         data = await proxy_logging_obj.pre_call_hook(user_api_key_dict=user_api_key_dict, data=data, call_type="embeddings")
         ## ROUTE TO CORRECT ENDPOINT ##
@@ -1116,21 +1100,20 @@ async def embeddings(request: Request, user_api_key_dict: UserAPIKeyAuth = Depen
 
         return response
     except Exception as e:
-        await proxy_logging_obj.post_call_failure_hook(user_api_key_dict=user_api_key_dict, original_exception=e) 
+        await proxy_logging_obj.post_call_failure_hook(user_api_key_dict=user_api_key_dict, original_exception=e)
         traceback.print_exc()
         if isinstance(e, HTTPException):
             raise e
-        else:
-            error_traceback = traceback.format_exc()
-            error_msg = f"{str(e)}\n\n{error_traceback}"
-            try:
-                status = e.status_code # type: ignore
-            except:
-                status = 500
-            raise HTTPException(
-                status_code=status,
-                detail=error_msg
-            )
+        error_traceback = traceback.format_exc()
+        error_msg = f"{str(e)}\n\n{error_traceback}"
+        try:
+            status = e.status_code # type: ignore
+        except:
+            status = 500
+        raise HTTPException(
+            status_code=status,
+            detail=error_msg
+        )
 
 #### KEY MANAGEMENT #### 
 
@@ -1202,7 +1185,9 @@ async def info_key_fn(key: str = fastapi.Query(..., description="Key in the requ
     global prisma_client
     try: 
         if prisma_client is None: 
-            raise Exception(f"Database not connected. Connect a database to your proxy - https://docs.litellm.ai/docs/simple_proxy#managing-auth---virtual-keys")
+            raise Exception(
+                "Database not connected. Connect a database to your proxy - https://docs.litellm.ai/docs/simple_proxy#managing-auth---virtual-keys"
+            )
         key_info = await prisma_client.get_data(token=key)
         return {"key": key, "info": key_info}
     except Exception as e: 
@@ -1336,13 +1321,14 @@ async def delete_model(model_info: ModelInfoDelete):
         if 'model_list' not in config:
             raise HTTPException(status_code=404, detail="No model list available in the config.")
 
-        # Check if the model with the specified model_id exists
-        model_to_delete = None
-        for model in config['model_list']:
-            if model.get('model_info', {}).get('id', None) == model_info.id:
-                model_to_delete = model
-                break
-
+        model_to_delete = next(
+            (
+                model
+                for model in config['model_list']
+                if model.get('model_info', {}).get('id', None) == model_info.id
+            ),
+            None,
+        )
         # If the model was not found, return an error
         if model_to_delete is None:
             raise HTTPException(status_code=404, detail="Model with given model_id not found.")
@@ -1373,7 +1359,7 @@ async def _litellm_chat_completions_worker(data, user_api_key_dict):
             ### CALL HOOKS ### - modify incoming data before calling the model
             data = await proxy_logging_obj.pre_call_hook(user_api_key_dict=user_api_key_dict, data=data, call_type="completion")
 
-            print(f"_litellm_chat_completions_worker started")
+            print("_litellm_chat_completions_worker started")
             ### ROUTE THE REQUEST ###
             router_model_names = [m["model_name"] for m in llm_model_list] if llm_model_list is not None else []
             if llm_router is not None and data["model"] in router_model_names: # model in router model list 
@@ -1384,22 +1370,24 @@ async def _litellm_chat_completions_worker(data, user_api_key_dict):
                 response = await llm_router.acompletion(**data)
             else: # router is not set
                 response = await litellm.acompletion(**data)
-            
+
             print(f"final response: {response}")
             return response
         except HTTPException as e: 
             print(f"EXCEPTION RAISED IN _litellm_chat_completions_worker - {e.status_code}; {e.detail}")
-            if e.status_code == 429 and "Max parallel request limit reached" in e.detail:
-                print(f"Max parallel request limit reached!")
-                timeout = litellm._calculate_retry_after(remaining_retries=3, max_retries=3, min_timeout=1)
-                await asyncio.sleep(timeout)
-            else: 
-                raise e 
+            if (
+                e.status_code != 429
+                or "Max parallel request limit reached" not in e.detail
+            ):
+                raise e
+            print("Max parallel request limit reached!")
+            timeout = litellm._calculate_retry_after(remaining_retries=3, max_retries=3, min_timeout=1)
+            await asyncio.sleep(timeout) 
 
 
 @router.post("/queue/chat/completions", tags=["experimental"], dependencies=[Depends(user_api_key_auth)])
 async def async_queue_request(request: Request, model: Optional[str] = None, user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth), background_tasks: BackgroundTasks = BackgroundTasks()):
-    global general_settings, user_debug, proxy_logging_obj 
+    global general_settings, user_debug, proxy_logging_obj
     """
     v2 attempt at a background worker to handle queuing. 
 
@@ -1435,11 +1423,9 @@ async def async_queue_request(request: Request, model: Optional[str] = None, use
         if "metadata" in data:
             print(f'received metadata: {data["metadata"]}')
             data["metadata"]["user_api_key"] = user_api_key_dict.api_key
-            data["metadata"]["headers"] = dict(request.headers)
         else:
             data["metadata"] = {"user_api_key": user_api_key_dict.api_key}
-            data["metadata"]["headers"] = dict(request.headers)
-        
+        data["metadata"]["headers"] = dict(request.headers)
         global user_temperature, user_request_timeout, user_max_tokens, user_api_base
         # override with user settings, these are params passed via cli
         if user_temperature: 
@@ -1455,7 +1441,7 @@ async def async_queue_request(request: Request, model: Optional[str] = None, use
 
         if 'stream' in data and data['stream'] == True: # use generate_responses to stream responses
             return StreamingResponse(async_data_generator(user_api_key_dict=user_api_key_dict, response=response), media_type='text/event-stream')
-        
+
         background_tasks.add_task(log_input_output, request, response) # background task for logging to OTEL 
         return response
     except Exception as e: 
@@ -1529,18 +1515,17 @@ async def health_endpoint(request: Request, model: Optional[str] = fastapi.Query
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "Model list not initialized"},
         )
-    
+
     if use_background_health_checks:
         return health_check_results
-    else:
-        healthy_endpoints, unhealthy_endpoints = await perform_health_check(llm_model_list, model)
+    healthy_endpoints, unhealthy_endpoints = await perform_health_check(llm_model_list, model)
 
-        return {
-            "healthy_endpoints": healthy_endpoints,
-            "unhealthy_endpoints": unhealthy_endpoints,
-            "healthy_count": len(healthy_endpoints),
-            "unhealthy_count": len(unhealthy_endpoints),
-        }
+    return {
+        "healthy_endpoints": healthy_endpoints,
+        "unhealthy_endpoints": unhealthy_endpoints,
+        "healthy_count": len(healthy_endpoints),
+        "unhealthy_count": len(unhealthy_endpoints),
+    }
 
 @router.get("/")
 async def home(request: Request):

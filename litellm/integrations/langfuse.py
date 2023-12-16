@@ -49,7 +49,7 @@ class LangFuseLogger:
                     except:
                         # if casting value to str fails don't block logging
                         pass
- 
+
             # end of processing langfuse ########################
             self.Langfuse.generation(InitialGeneration(
                 name=metadata.get("generation_name", "litellm-completion"),
@@ -72,7 +72,6 @@ class LangFuseLogger:
         except:
             traceback.print_exc()
             print_verbose(f"Langfuse Layer Error - {traceback.format_exc()}")
-            pass
 
     async def _async_log_event(self, kwargs, response_obj, start_time, end_time, print_verbose):
         self.log_event(kwargs, response_obj, start_time, end_time, print_verbose)

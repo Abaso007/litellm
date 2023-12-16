@@ -15,7 +15,7 @@ from litellm import Router
 
 @pytest.mark.asyncio
 async def test_acompletion_caching_on_router(): 
-	# tests acompletion + caching on router 
+	# tests acompletion + caching on router
 	try:
 		litellm.set_verbose = True
 		model_list = [
@@ -64,14 +64,13 @@ async def test_acompletion_caching_on_router():
 	except litellm.Timeout as e: 
 		end_time = time.time()
 		print(f"timeout error occurred: {end_time - start_time}")
-		pass
 	except Exception as e:
 		traceback.print_exc()
 		pytest.fail(f"Error occurred: {e}")
 
 @pytest.mark.asyncio
 async def test_acompletion_caching_on_router_caching_groups(): 
-	# tests acompletion + caching on router 
+	# tests acompletion + caching on router
 	try:
 		litellm.set_verbose = True
 		model_list = [
@@ -121,7 +120,6 @@ async def test_acompletion_caching_on_router_caching_groups():
 	except litellm.Timeout as e: 
 		end_time = time.time()
 		print(f"timeout error occurred: {end_time - start_time}")
-		pass
 	except Exception as e:
 		traceback.print_exc()
 		pytest.fail(f"Error occurred: {e}")

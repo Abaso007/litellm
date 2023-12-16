@@ -63,13 +63,12 @@ def validate_environment(api_key):
         raise ValueError(
             "Missing Anthropic API Key - A call is being made to anthropic but no key is set either in the environment variables or via params"
         )
-    headers = {
+    return {
         "accept": "application/json",
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
         "x-api-key": api_key,
     }
-    return headers
 
 def completion(
     model: str,
@@ -97,9 +96,9 @@ def completion(
             )
     else:
         prompt = prompt_factory(model=model, messages=messages, custom_llm_provider="anthropic")
-        
+
     ## Load Config
-    config = litellm.AnthropicConfig.get_config() 
+    config = litellm.AnthropicConfig.get_config()
     for k, v in config.items(): 
         if k not in optional_params: # completion(top_k=3) > anthropic_config(top_k=3) <- allows for dynamic variables to be passed in
             optional_params[k] = v
@@ -116,7 +115,7 @@ def completion(
         api_key=api_key,
         additional_args={"complete_input_dict": data, "api_base": api_base},
     )
-    
+
     ## COMPLETION CALL
     if "stream" in optional_params and optional_params["stream"] == True:
         response = requests.post(
@@ -125,7 +124,7 @@ def completion(
             data=json.dumps(data),
             stream=optional_params["stream"],
         )
-        
+
         if response.status_code != 200:
             raise AnthropicError(status_code=response.status_code, message=response.text)
 
@@ -136,7 +135,7 @@ def completion(
         )
         if response.status_code != 200:
             raise AnthropicError(status_code=response.status_code, message=response.text)
-        
+
         ## LOGGING
         logging_obj.post_call(
             input=prompt,
@@ -157,12 +156,11 @@ def completion(
                 message=str(completion_response["error"]),
                 status_code=response.status_code,
             )
-        else:
-            if len(completion_response["completion"]) > 0:
-                model_response["choices"][0]["message"]["content"] = completion_response[
-                    "completion"
-                ]
-            model_response.choices[0].finish_reason = completion_response["stop_reason"]
+        if len(completion_response["completion"]) > 0:
+            model_response["choices"][0]["message"]["content"] = completion_response[
+                "completion"
+            ]
+        model_response.choices[0].finish_reason = completion_response["stop_reason"]
 
         ## CALCULATING USAGE
         prompt_tokens = len(

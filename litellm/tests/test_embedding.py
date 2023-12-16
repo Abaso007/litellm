@@ -56,7 +56,7 @@ def test_openai_azure_embedding_simple():
         print(response)
         response_keys = set(dict(response).keys())
         response_keys.discard('_response_ms')
-        assert set(["usage", "model", "object", "data"]) == set(response_keys) #assert litellm response has expected keys from OpenAI embedding response
+        assert {"usage", "model", "object", "data"} == set(response_keys)
 
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
@@ -74,7 +74,6 @@ def test_openai_azure_embedding_timeouts():
         print(response)
     except openai.APITimeoutError:
         print("Good job got timeout error!")
-        pass
     except Exception as e:
         pytest.fail(f"Expected timeout error, did not get the correct error. Instead got {e}")
 
@@ -90,7 +89,6 @@ def test_openai_embedding_timeouts():
         print(response)
     except openai.APITimeoutError:
         print("Good job got OpenAI timeout error!")
-        pass
     except Exception as e:
         pytest.fail(f"Expected timeout error, did not get the correct error. Instead got {e}")
 # test_openai_embedding_timeouts()
@@ -132,7 +130,7 @@ def test_cohere_embedding():
         response = embedding(
             model="embed-english-v2.0", input=["good morning from litellm", "this is another item"]
         )
-        print(f"response:", response)
+        print("response:", response)
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 
@@ -145,7 +143,7 @@ def test_cohere_embedding3():
             model="embed-english-v3.0", 
             input=["good morning from litellm", "this is another item"], 
         )
-        print(f"response:", response)
+        print("response:", response)
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 
@@ -158,9 +156,9 @@ def test_bedrock_embedding_titan():
             model="amazon.titan-embed-text-v1", input=["good morning from litellm, attempting to embed data",
                                                        "lets test a second string for good measure"]
         )
-        print(f"response:", response)
+        print("response:", response)
         assert isinstance(response['data'][0]['embedding'], list), "Expected response to be a list"
-        print(f"type of first embedding:", type(response['data'][0]['embedding'][0]))
+        print("type of first embedding:", type(response['data'][0]['embedding'][0]))
         assert all(isinstance(x, float) for x in response['data'][0]['embedding']), "Expected response to be a list of floats"
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
@@ -174,9 +172,9 @@ def test_bedrock_embedding_cohere():
             aws_region_name="os.environ/AWS_REGION_NAME_2"
         )
         assert isinstance(response['data'][0]['embedding'], list), "Expected response to be a list"
-        print(f"type of first embedding:", type(response['data'][0]['embedding'][0]))
+        print("type of first embedding:", type(response['data'][0]['embedding'][0]))
         assert all(isinstance(x, float) for x in response['data'][0]['embedding']), "Expected response to be a list of floats"
-        # print(f"response:", response)
+            # print(f"response:", response)
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 
@@ -190,7 +188,7 @@ def test_hf_embedding():
         response = embedding(
             model="huggingface/sentence-transformers/all-MiniLM-L6-v2", input=["good morning from litellm", "this is another item"]
         )
-        print(f"response:", response)
+        print("response:", response)
     except Exception as e:
         # Note: Huggingface inference API is unstable and fails with "model loading errors all the time"
         pass

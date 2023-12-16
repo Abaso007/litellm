@@ -30,28 +30,28 @@ class MyCustomHandler(CustomLogger):
         self.data_sent_to_api: dict = {}
 
     def log_pre_api_call(self, model, messages, kwargs): 
-        print(f"Pre-API Call")
+        print("Pre-API Call")
         self.data_sent_to_api = kwargs["additional_args"].get("complete_input_dict", {})
     
     def log_post_api_call(self, kwargs, response_obj, start_time, end_time): 
-        print(f"Post-API Call")
+        print("Post-API Call")
     
     def log_stream_event(self, kwargs, response_obj, start_time, end_time):
-        print(f"On Stream")
+        print("On Stream")
         
     def log_success_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Success")
+        print("On Success")
         self.success = True
         if kwargs.get("stream") == True:
             self.sync_stream_collected_response = response_obj
 
 
     def log_failure_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Failure")
+        print("On Failure")
         self.failure = True
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Async success")
+        print("On Async success")
         print(f"received kwargs user: {kwargs['user']}")
         self.async_success = True
         if kwargs.get("model") == "text-embedding-ada-002":
@@ -64,19 +64,19 @@ class MyCustomHandler(CustomLogger):
         self.user = kwargs.get("user", None)
     
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Async Failure")
+        print("On Async Failure")
         self.async_failure = True
         if kwargs.get("model") == "text-embedding-ada-002":
             self.async_failure_embedding = True
             self.async_embedding_kwargs_fail = kwargs
-        
+
         self.async_completion_kwargs_fail = kwargs
 
 class TmpFunction:
     complete_streaming_response_in_callback = ""
     async_success: bool = False
     async def async_test_logging_fn(self, kwargs, completion_obj, start_time, end_time):
-        print(f"ON ASYNC LOGGING")
+        print("ON ASYNC LOGGING")
         self.async_success = True
         print(f'kwargs.get("complete_streaming_response"): {kwargs.get("complete_streaming_response")}')
         self.complete_streaming_response_in_callback = kwargs.get("complete_streaming_response")

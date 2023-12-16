@@ -124,6 +124,7 @@ def test_add_new_key_max_parallel_limit(client):
             json_data = {'model': 'azure-model', "messages": [{"role": "user", "content": f"this is a test request, write a short poem {time.time()}"}]}
             response = client.post("/chat/completions", json=json_data, headers={"Authorization": f"Bearer {result['key']}"})
             return response
+
         def _run_in_parallel():
             with ThreadPoolExecutor(max_workers=2) as executor:
                 future1 = executor.submit(_post_data)
@@ -132,10 +133,12 @@ def test_add_new_key_max_parallel_limit(client):
                 # Obtain the results from the futures
                 response1 = future1.result()
                 response2 = future2.result()
-                if response1.status_code == 429 or response2.status_code == 429:
-                    pass
-                else: 
+                if (
+                    response1.status_code != 429
+                    and response2.status_code != 429
+                ):
                     raise Exception()
+
         _run_in_parallel()
     except Exception as e:
         pytest.fail(f"LiteLLM Proxy test failed. Exception: {str(e)}")
@@ -158,6 +161,7 @@ def test_add_new_key_max_parallel_limit_streaming(client):
             json_data = {'model': 'azure-model', "messages": [{"role": "user", "content": f"this is a test request, write a short poem {time.time()}"}], "stream": True}
             response = client.post("/chat/completions", json=json_data, headers={"Authorization": f"Bearer {result['key']}"})
             return response
+
         def _run_in_parallel():
             with ThreadPoolExecutor(max_workers=2) as executor:
                 future1 = executor.submit(_post_data)
@@ -166,10 +170,12 @@ def test_add_new_key_max_parallel_limit_streaming(client):
                 # Obtain the results from the futures
                 response1 = future1.result()
                 response2 = future2.result()
-                if response1.status_code == 429 or response2.status_code == 429:
-                    pass
-                else: 
+                if (
+                    response1.status_code != 429
+                    and response2.status_code != 429
+                ):
                     raise Exception()
+
         _run_in_parallel()
     except Exception as e:
         pytest.fail(f"LiteLLM Proxy test failed. Exception: {str(e)}")

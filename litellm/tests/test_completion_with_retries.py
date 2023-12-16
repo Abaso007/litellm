@@ -45,7 +45,7 @@ def test_completion_custom_provider_model_name():
 def test_completion_with_num_retries(): 
     try: 
         response = completion(model="j2-ultra", messages=[{"messages": "vibe", "bad": "message"}], num_retries=2)
-        pytest.fail(f"Unmapped exception occurred")
+        pytest.fail("Unmapped exception occurred")
     except Exception as e: 
         pass
 
@@ -67,7 +67,6 @@ def test_completion_with_0_num_retries():
         # print(response)
     except Exception as e:
         print("exception", e)
-        pass
 
 # Call the test function
 test_completion_with_0_num_retries()

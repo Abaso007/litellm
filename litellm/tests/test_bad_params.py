@@ -30,7 +30,6 @@ def test_completion_with_empty_model():
         response = completion(model=model_val, messages=messages)
     except Exception as e:
         print(f"error occurred: {e}")
-        pass
 
 # def test_completion_catch_nlp_exception():
 # TEMP commented out NLP cloud API is unstable
@@ -69,9 +68,7 @@ def test_completion_invalid_param_cohere():
         response = completion(model="command-nightly", messages=messages, top_p=1)
         print(f"response: {response}")
     except Exception as e: 
-        if "Unsupported parameters passed: top_p" in str(e): 
-            pass
-        else: 
+        if "Unsupported parameters passed: top_p" not in str(e):
             pytest.fail(f'An error occurred {e}')
 
 # test_completion_invalid_param_cohere()
@@ -82,7 +79,6 @@ def test_completion_function_call_cohere():
         pytest.fail(f'An error occurred {e}')
     except Exception as e: 
         print(e)
-        pass
             
 
 # test_completion_function_call_cohere()
@@ -123,7 +119,6 @@ def test_completion_with_no_provider():
         response = completion(model=model, messages=messages)
     except Exception as e:
         print(f"error occurred: {e}")
-        pass
 
 # test_completion_with_no_provider()
 # # bad key

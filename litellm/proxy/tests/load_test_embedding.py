@@ -67,9 +67,10 @@ futures = []
 
 # Make concurrent calls
 with concurrent.futures.ThreadPoolExecutor(max_workers=concurrent_calls) as executor:
-    for _ in range(concurrent_calls):
-        futures.append(executor.submit(make_openai_completion, question))
-
+    futures.extend(
+        executor.submit(make_openai_completion, question)
+        for _ in range(concurrent_calls)
+    )
 # Wait for all futures to complete
 concurrent.futures.wait(futures)
 
@@ -87,7 +88,7 @@ end_time = time.time()
 # Calculate the duration
 duration = end_time - start_time
 
-print(f"Load test Summary:")
+print("Load test Summary:")
 print(f"Total Requests: {concurrent_calls}")
 print(f"Successful Calls: {successful_calls}")
 print(f"Failed Calls: {failed_calls}")

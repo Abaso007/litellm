@@ -122,7 +122,7 @@ def get_ollama_response_stream(
         url = api_base
     else: 
         url = f"{api_base}/api/generate"
-    
+
     ## Load Config
     config=litellm.OllamaConfig.get_config()
     for k, v in config.items():
@@ -140,13 +140,24 @@ def get_ollama_response_stream(
         api_key=None,
         additional_args={"api_base": url, "complete_input_dict": data, "headers": {},  "acompletion": acompletion,},
     )
-    if acompletion is True: 
-        if optional_params.get("stream", False):
-            response = ollama_async_streaming(url=url, data=data, model_response=model_response, encoding=encoding, logging_obj=logging_obj)
-        else:
-            response = ollama_acompletion(url=url, data=data, model_response=model_response, encoding=encoding, logging_obj=logging_obj)
-        return response
-    
+    if acompletion: 
+        return (
+            ollama_async_streaming(
+                url=url,
+                data=data,
+                model_response=model_response,
+                encoding=encoding,
+                logging_obj=logging_obj,
+            )
+            if optional_params.get("stream", False)
+            else ollama_acompletion(
+                url=url,
+                data=data,
+                model_response=model_response,
+                encoding=encoding,
+                logging_obj=logging_obj,
+            )
+        )
     else:
         return ollama_completion_stream(url=url, data=data)
 
@@ -165,19 +176,13 @@ def ollama_completion_stream(url, data):
                         if chunk.strip() != "":
                             j = json.loads(chunk)
                             if "error" in j:
-                                completion_obj = {
+                                yield {
                                     "role": "assistant",
                                     "content": "",
-                                    "error": j
+                                    "error": j,
                                 }
-                                yield completion_obj
                             if "response" in j:
-                                completion_obj = {
-                                    "role": "assistant",
-                                    "content": "",
-                                }
-                                completion_obj["content"] = j["response"]
-                                yield completion_obj
+                                yield {"role": "assistant", "content": j["response"]}
                 except Exception as e:
                     traceback.print_exc()
     session.close()

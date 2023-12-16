@@ -98,13 +98,13 @@ def completion(
             service_name="sagemaker-runtime",
             region_name=region_name,
         )
-    
+
     # pop streaming if it's in the optional params as 'stream' raises an error with sagemaker
     inference_params = deepcopy(optional_params)
     inference_params.pop("stream", None)
 
     ## Load Config
-    config = litellm.SagemakerConfig.get_config() 
+    config = litellm.SagemakerConfig.get_config()
     for k, v in config.items(): 
         if k not in inference_params: # completion(top_k=3) > sagemaker_config(top_k=3) <- allows for dynamic variables to be passed in
             inference_params[k] = v
@@ -120,12 +120,13 @@ def completion(
             messages=messages
         )
     else:
-        if hf_model_name is None:
-            if "llama-2" in model.lower(): # llama-2 model
-                if "chat" in model.lower(): # apply llama2 chat template
-                    hf_model_name = "meta-llama/Llama-2-7b-chat-hf"
-                else: # apply regular llama2 template
-                    hf_model_name = "meta-llama/Llama-2-7b"
+        if "llama-2" in model.lower():
+            if hf_model_name is None: # llama-2 model
+                hf_model_name = (
+                    "meta-llama/Llama-2-7b-chat-hf"
+                    if "chat" in model.lower()
+                    else "meta-llama/Llama-2-7b"
+                )
         hf_model_name = hf_model_name or model # pass in hf model name for pulling it's prompt template - (e.g. `hf_model_name="meta-llama/Llama-2-7b-chat-hf` applies the llama2 chat template to the prompt)
         prompt = prompt_factory(model=hf_model_name, messages=messages)
 
@@ -158,7 +159,7 @@ def completion(
         )
     except Exception as e: 
         raise SagemakerError(status_code=500, message=f"{str(e)}")
-    
+
     response = response["Body"].read().decode("utf8")
     ## LOGGING
     logging_obj.post_call(
@@ -177,7 +178,7 @@ def completion(
             completion_output += completion_response_choices["generation"]
         elif "generated_text" in completion_response_choices:
             completion_output += completion_response_choices["generated_text"]
-        
+
         # check if the prompt template is part of output, if so - filter it out 
         if completion_output.startswith(prompt) and "<s>" in prompt:
             completion_output = completion_output.replace(prompt, "", 1)
@@ -189,7 +190,7 @@ def completion(
     ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
     prompt_tokens = len(
         encoding.encode(prompt)
-    ) 
+    )
     completion_tokens = len(
         encoding.encode(model_response["choices"][0]["message"].get("content", ""))
     )
@@ -218,7 +219,7 @@ def embedding(model: str,
     Supports Huggingface Jumpstart embeddings like GPT-6B 
     """
     ### BOTO3 INIT
-    import boto3 
+    import boto3
     # pop aws_secret_access_key, aws_access_key_id, aws_region_name from kwargs, since completion calls fail with them
     aws_secret_access_key = optional_params.pop("aws_secret_access_key", None)
     aws_access_key_id = optional_params.pop("aws_access_key_id", None)
@@ -247,13 +248,13 @@ def embedding(model: str,
             service_name="sagemaker-runtime",
             region_name=region_name,
         )
-    
+
     # pop streaming if it's in the optional params as 'stream' raises an error with sagemaker
     inference_params = deepcopy(optional_params)
     inference_params.pop("stream", None)
 
     ## Load Config
-    config = litellm.SagemakerConfig.get_config() 
+    config = litellm.SagemakerConfig.get_config()
     for k, v in config.items(): 
         if k not in inference_params: # completion(top_k=3) > sagemaker_config(top_k=3) <- allows for dynamic variables to be passed in
             inference_params[k] = v
@@ -313,24 +314,15 @@ def embedding(model: str,
         raise SagemakerError(status_code=422, message=f"Response not in expected format - {embeddings}")
 
 
-    output_data = []
-    for idx, embedding in enumerate(embeddings):
-        output_data.append(
-            {
-                "object": "embedding",
-                "index": idx,
-                "embedding": embedding
-            }
-        )
-
+    output_data = [
+        {"object": "embedding", "index": idx, "embedding": embedding}
+        for idx, embedding in enumerate(embeddings)
+    ]
     model_response["object"] = "list"
     model_response["data"] = output_data
     model_response["model"] = model
-    
-    input_tokens = 0
-    for text in input:
-        input_tokens+=len(encoding.encode(text)) 
 
+    input_tokens = sum(len(encoding.encode(text)) for text in input)
     model_response["usage"] = Usage(prompt_tokens=input_tokens, completion_tokens=0, total_tokens=input_tokens)
-    
+
     return model_response

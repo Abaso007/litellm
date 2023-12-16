@@ -122,7 +122,7 @@ for future in futures:
     else:
         failed_calls += 1
 
-print(f"Load test Summary:")
+print("Load test Summary:")
 print(f"Total Requests: {concurrent_calls}")
 print(f"Successful Calls: {successful_calls}")
 print(f"Failed Calls: {failed_calls}")

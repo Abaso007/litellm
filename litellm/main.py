@@ -111,12 +111,11 @@ class Completions():
     for k, v in kwargs.items():
         self.params[k] = v
     model = model or self.params.get('model')
-    response = completion(model=model, messages=messages, **self.params)
-    return response  
+    return completion(model=model, messages=messages, **self.params)  
 
 @client
 async def acompletion(*args, **kwargs):
-    """
+  """
     Asynchronously executes a litellm.completion() call for any of litellm supported llms (example gpt-4, gpt-3.5-turbo, claude-2, command-nightly)
 
     Parameters:
@@ -154,54 +153,56 @@ async def acompletion(*args, **kwargs):
         - The `completion` function is called using `run_in_executor` to execute synchronously in the event loop.
         - If `stream` is True, the function returns an async generator that yields completion lines.
     """
-    loop = asyncio.get_event_loop()
-    model = args[0] if len(args) > 0 else kwargs["model"]
-    ### PASS ARGS TO COMPLETION ### 
-    kwargs["acompletion"] = True
-    custom_llm_provider = None
-    try: 
-        # Use a partial function to pass your keyword arguments
-        func = partial(completion, *args, **kwargs)
+  loop = asyncio.get_event_loop()
+  model = args[0] if args else kwargs["model"]
+  ### PASS ARGS TO COMPLETION ### 
+  kwargs["acompletion"] = True
+  custom_llm_provider = None
+  try: 
+    # Use a partial function to pass your keyword arguments
+    func = partial(completion, *args, **kwargs)
 
-        # Add the context to the function
-        ctx = contextvars.copy_context()
-        func_with_context = partial(ctx.run, func)
+    # Add the context to the function
+    ctx = contextvars.copy_context()
+    func_with_context = partial(ctx.run, func)
 
-        _, custom_llm_provider, _, _ = get_llm_provider(model=model, api_base=kwargs.get("api_base", None))
+    _, custom_llm_provider, _, _ = get_llm_provider(model=model, api_base=kwargs.get("api_base", None))
 
-        if (custom_llm_provider == "openai" 
-            or custom_llm_provider == "azure" 
-            or custom_llm_provider == "custom_openai"
-            or custom_llm_provider == "anyscale"
-            or custom_llm_provider == "mistral"
-            or custom_llm_provider == "openrouter"
-            or custom_llm_provider == "deepinfra"
-            or custom_llm_provider == "perplexity"
-            or custom_llm_provider == "text-completion-openai"
-            or custom_llm_provider == "huggingface"
-            or custom_llm_provider == "ollama"
-            or custom_llm_provider == "vertex_ai"): # currently implemented aiohttp calls for just azure and openai, soon all. 
-            if kwargs.get("stream", False): 
-                response = completion(*args, **kwargs)
-            else:
-                # Await normally
-                init_response = await loop.run_in_executor(None, func_with_context)
-                if isinstance(init_response, dict) or isinstance(init_response, ModelResponse): ## CACHING SCENARIO 
-                    response = init_response
-                elif asyncio.iscoroutine(init_response):
-                    response = await init_response
-        else: 
-            # Call the synchronous function using run_in_executor
-            response =  await loop.run_in_executor(None, func_with_context)
-        if kwargs.get("stream", False): # return an async generator
-            return _async_streaming(response=response, model=model, custom_llm_provider=custom_llm_provider, args=args)
-        else: 
-            return response
-    except Exception as e: 
-        custom_llm_provider = custom_llm_provider or "openai"
-        raise exception_type(
-                model=model, custom_llm_provider=custom_llm_provider, original_exception=e, completion_kwargs=args,
-            )
+    if custom_llm_provider in [
+        "openai",
+        "azure",
+        "custom_openai",
+        "anyscale",
+        "mistral",
+        "openrouter",
+        "deepinfra",
+        "perplexity",
+        "text-completion-openai",
+        "huggingface",
+        "ollama",
+        "vertex_ai",
+    ]: # currently implemented aiohttp calls for just azure and openai, soon all. 
+      if kwargs.get("stream", False): 
+        response = completion(*args, **kwargs)
+      else:
+        # Await normally
+        init_response = await loop.run_in_executor(None, func_with_context)
+        if isinstance(init_response, (dict, ModelResponse)): ## CACHING SCENARIO 
+          response = init_response
+        elif asyncio.iscoroutine(init_response):
+            response = await init_response
+    else: 
+      # Call the synchronous function using run_in_executor
+      response =  await loop.run_in_executor(None, func_with_context)
+    if kwargs.get("stream", False): # return an async generator
+        return _async_streaming(response=response, model=model, custom_llm_provider=custom_llm_provider, args=args)
+    else: 
+        return response
+  except Exception as e: 
+      custom_llm_provider = custom_llm_provider or "openai"
+      raise exception_type(
+              model=model, custom_llm_provider=custom_llm_provider, original_exception=e, completion_kwargs=args,
+          )
 
 async def _async_streaming(response, model, custom_llm_provider, args): 
     try: 
@@ -216,7 +217,7 @@ async def _async_streaming(response, model, custom_llm_provider, args):
             )
 
 def mock_completion(model: str, messages: List, stream: Optional[bool] = False, mock_response: str = "This is a mock request", **kwargs):
-    """
+  """
     Generate a mock completion response for testing or debugging purposes.
 
     This is a helper function that simulates the response structure of the OpenAI completion API.
@@ -238,21 +239,20 @@ def mock_completion(model: str, messages: List, stream: Optional[bool] = False, 
         - This function is intended for testing or debugging purposes to generate mock completion responses.
         - If 'stream' is True, it returns a response that mimics the behavior of a streaming completion.
     """
-    try:
-        model_response = ModelResponse(stream=stream)
-        if stream is True:
-            # don't try to access stream object,
-            response = mock_completion_streaming_obj(model_response, mock_response=mock_response, model=model)
-            return response
-        
-        model_response["choices"][0]["message"]["content"] = mock_response
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
-        return model_response
+  try:
+    model_response = ModelResponse(stream=stream)
+    if stream is True:
+      return mock_completion_streaming_obj(model_response,
+                                           mock_response=mock_response,
+                                           model=model)
+    model_response["choices"][0]["message"]["content"] = mock_response
+    model_response["created"] = int(time.time())
+    model_response["model"] = model
+    return model_response
 
-    except:
-        traceback.print_exc()
-        raise Exception("Mock completion response failed")
+  except:
+      traceback.print_exc()
+      raise Exception("Mock completion response failed")
 
 @client
 def completion(

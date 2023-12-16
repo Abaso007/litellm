@@ -214,7 +214,7 @@ def togetherai_test_completion():
             response_3 = litellm.completion(model="together_ai/togethercomputer/llama-2-70b-chat", 
                                                 messages=[{ "content": "Hello, how are you?","role": "user"}],
                                                 n=2)
-            pytest.fail(f"Error not raised when n=2 passed to provider")
+            pytest.fail("Error not raised when n=2 passed to provider")
         except: 
             pass
     except Exception as e:
@@ -285,7 +285,7 @@ def nlp_cloud_test_completion():
             response_3 = litellm.completion(model="dolphin", 
                                                 messages=[{ "content": "Hello, how are you?","role": "user"}],
                                                 n=2)
-            pytest.fail(f"Error not raised when n=2 passed to provider")
+            pytest.fail("Error not raised when n=2 passed to provider")
         except: 
             pass
     except Exception as e:

@@ -284,19 +284,7 @@ def convert_messages_to_prompt(model, messages, provider, custom_prompt_dict):
         else:
             prompt = prompt_factory(model=model, messages=messages, custom_llm_provider="anthropic")
     else:
-        prompt = ""
-        for message in messages:
-            if "role" in message:
-                if message["role"] == "user":
-                    prompt += (
-                        f"{message['content']}"
-                    )
-                else:
-                    prompt += (
-                        f"{message['content']}"
-                    )
-            else:
-                prompt += f"{message['content']}"
+        prompt = "".join(f"{message['content']}" for message in messages)
     return prompt
 
 
@@ -398,7 +386,7 @@ def completion(
                 "inputText": prompt,
                 "textGenerationConfig": inference_params,
             })
-        
+
         ## COMPLETION CALL
         accept = 'application/json'
         contentType = 'application/json'
@@ -427,7 +415,6 @@ def completion(
                 )
 
                 response = response.get('body').read()
-                return response
             else:
                 ## LOGGING
                 request_str = f"""
@@ -443,7 +430,7 @@ def completion(
                         api_key="",
                         additional_args={"complete_input_dict": data, "request_str": request_str},
                 )
-                
+
                 response = client.invoke_model_with_response_stream(
                     body=data,
                     modelId=model,
@@ -451,7 +438,7 @@ def completion(
                     contentType=contentType
                 )
                 response = response.get('body')
-                return response
+            return response
         try: 
             ## LOGGING
             request_str = f"""
@@ -475,7 +462,7 @@ def completion(
             )
         except Exception as e: 
             raise BedrockError(status_code=500, message=str(e))
-        
+
         response_body = json.loads(response.get('body').read())
 
         ## LOGGING
@@ -506,12 +493,11 @@ def completion(
                 message=outputText,
                 status_code=response_metadata.get("HTTPStatusCode", 500),
             )
-        else:
-            try:
-                if len(outputText) > 0:
-                    model_response["choices"][0]["message"]["content"] = outputText
-            except:
-                raise BedrockError(message=json.dumps(outputText), status_code=response_metadata.get("HTTPStatusCode", 500))
+        try:
+            if len(outputText) > 0:
+                model_response["choices"][0]["message"]["content"] = outputText
+        except:
+            raise BedrockError(message=json.dumps(outputText), status_code=response_metadata.get("HTTPStatusCode", 500))
 
         ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
         prompt_tokens = len(
@@ -536,9 +522,8 @@ def completion(
     except Exception as e: 
         if exception_mapping_worked:
             raise e
-        else: 
-            import traceback
-            raise BedrockError(status_code=500, message=traceback.format_exc())
+        import traceback
+        raise BedrockError(status_code=500, message=traceback.format_exc())
 
 def _embedding_func_single(
         model: str,
@@ -560,7 +545,7 @@ def _embedding_func_single(
     elif provider == "cohere":
         inference_params["input_type"] = inference_params.get("input_type", "search_document") # aws bedrock example default - https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/providers?model=cohere.embed-english-v3
         data = {"texts": [input], **inference_params} # type: ignore
-    body = json.dumps(data).encode("utf-8") 
+    body = json.dumps(data).encode("utf-8")
     ## LOGGING
     request_str = f"""
     response = client.invoke_model(
@@ -590,13 +575,13 @@ def _embedding_func_single(
                 additional_args={"complete_input_dict": data},
                 original_response=json.dumps(response_body),
             )
-        if provider == "cohere":
+        if provider == "amazon":
+            return response_body.get("embedding")
+        elif provider == "cohere":
             response = response_body.get("embeddings")
             # flatten list
             response = [item for sublist in response for item in sublist]
             return response
-        elif provider == "amazon":
-            return response_body.get("embedding")
     except Exception as e:
         raise BedrockError(message=f"Embedding Error with model {model}: {e}", status_code=500)
 
@@ -626,30 +611,25 @@ def embedding(
     embeddings = [_embedding_func_single(model, i, optional_params=optional_params, client=client, logging_obj=logging_obj) for i in input] # [TODO]: make these parallel calls
 
 
-    ## Populate OpenAI compliant dictionary
-    embedding_response = []
-    for idx, embedding in enumerate(embeddings):
-        embedding_response.append(
-            {
-                "object": "embedding",
-                "index": idx,
-                "embedding": embedding,
-            }
-        )
+    embedding_response = [
+        {
+            "object": "embedding",
+            "index": idx,
+            "embedding": embedding,
+        }
+        for idx, embedding in enumerate(embeddings)
+    ]
     model_response["object"] = "list"
     model_response["data"] = embedding_response
     model_response["model"] = model
-    input_tokens = 0
-
     input_str = "".join(input)
 
-    input_tokens+=len(encoding.encode(input_str))
-
+    input_tokens = 0 + len(encoding.encode(input_str))
     usage = Usage(
             prompt_tokens=input_tokens,
             completion_tokens=0,
             total_tokens=input_tokens + 0
     )
     model_response.usage = usage
-    
+
     return model_response

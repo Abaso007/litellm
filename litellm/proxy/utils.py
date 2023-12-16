@@ -20,10 +20,8 @@ class ProxyLogging:
 
     def __init__(self, user_api_key_cache: DualCache):
         ## INITIALIZE  LITELLM CALLBACKS ##
-        self.call_details: dict = {}
-        self.call_details["user_api_key_cache"] = user_api_key_cache
-        self.max_parallel_request_limiter = MaxParallelRequestsHandler()  
-        pass
+        self.call_details: dict = {"user_api_key_cache": user_api_key_cache}
+        self.max_parallel_request_limiter = MaxParallelRequestsHandler()
 
     def _init_litellm_callbacks(self):
         
@@ -142,10 +140,7 @@ class PrismaClient:
         
 
     def hash_token(self, token: str):
-        # Hash the string using SHA-256
-        hashed_token = hashlib.sha256(token.encode()).hexdigest()
-        
-        return hashed_token
+        return hashlib.sha256(token.encode()).hexdigest()
 
     @backoff.on_exception(
         backoff.expo,
@@ -160,20 +155,20 @@ class PrismaClient:
             hashed_token = token
             if token.startswith("sk-"): 
                 hashed_token = self.hash_token(token=token)
-            if expires: 
-                response = await self.db.litellm_verificationtoken.find_first(
-                        where={
-                            "token": hashed_token,
-                            "expires": {"gte": expires}  # Check if the token is not expired
-                        }
-                    )
-            else: 
-                response = await self.db.litellm_verificationtoken.find_unique(
+            return (
+                await self.db.litellm_verificationtoken.find_first(
                     where={
-                        "token": hashed_token
+                        "token": hashed_token,
+                        "expires": {
+                            "gte": expires
+                        },  # Check if the token is not expired
                     }
                 )
-            return response
+                if expires
+                else await self.db.litellm_verificationtoken.find_unique(
+                    where={"token": hashed_token}
+                )
+            )
         except Exception as e: 
             asyncio.create_task(self.proxy_logging_obj.failure_handler(original_exception=e))
             raise e
@@ -196,16 +191,15 @@ class PrismaClient:
             db_data = copy.deepcopy(data)
             db_data["token"] = hashed_token
 
-            new_verification_token = await self.db.litellm_verificationtoken.upsert( # type: ignore
+            return await self.db.litellm_verificationtoken.upsert(  # type: ignore
                 where={
                     'token': hashed_token,
                 },
                 data={
-                    "create": {**db_data}, #type: ignore
-                    "update": {} # don't do anything if it already exists
-                }
+                    "create": {**db_data},  # type: ignore
+                    "update": {},  # don't do anything if it already exists
+                },
             )
-            return new_verification_token
         except Exception as e:
             asyncio.create_task(self.proxy_logging_obj.failure_handler(original_exception=e))
             raise e
@@ -302,11 +296,11 @@ def get_instance_fn(value: str, config_file_path: Optional[str] = None) -> Any:
         print_verbose(f"value: {value}")
         # Split the path by dots to separate module from instance
         parts = value.split(".")
-        
+
         # The module path is all but the last part, and the instance_name is the last part
         module_name = ".".join(parts[:-1])
         instance_name = parts[-1]
-        
+
         # If config_file_path is provided, use it to determine the module spec and load the module
         if config_file_path is not None:
             directory = os.path.dirname(config_file_path)
@@ -321,11 +315,8 @@ def get_instance_fn(value: str, config_file_path: Optional[str] = None) -> Any:
         else:
             # Dynamically import the module
             module = importlib.import_module(module_name)
-        
-        # Get the instance from the module
-        instance = getattr(module, instance_name)
-        
-        return instance
+
+        return getattr(module, instance_name)
     except ImportError as e:
         # Re-raise the exception with a user-friendly message
         raise ImportError(f"Could not import {instance_name} from {module_name}") from e

@@ -86,8 +86,6 @@ def completion(
 ):
     headers = validate_environment(api_key)
     completion_url = api_base
-    model = model
-
     ## Load Config
     config=litellm.MaritTalkConfig.get_config()
     for k, v in config.items():
@@ -111,47 +109,47 @@ def completion(
     )
     if "stream" in optional_params and optional_params["stream"] == True:
         return response.iter_lines()
-    else:
-        ## LOGGING
-        logging_obj.post_call(
-                input=messages,
-                api_key=api_key,
-                original_response=response.text,
-                additional_args={"complete_input_dict": data},
-            )
-        print_verbose(f"raw model_response: {response.text}")
-        ## RESPONSE OBJECT
-        completion_response = response.json()
-        if "error" in completion_response:
-            raise MaritalkError(
-                message=completion_response["error"],
-                status_code=response.status_code,
-            )
-        else:
-            try:
-                if len(completion_response["answer"]) > 0:
-                    model_response["choices"][0]["message"]["content"] = completion_response["answer"]
-            except Exception as e:
-                raise MaritalkError(message=response.text, status_code=response.status_code)
-
-        ## CALCULATING USAGE
-        prompt = "".join(m["content"] for m in messages)
-        prompt_tokens = len(
-            encoding.encode(prompt)
-        ) 
-        completion_tokens = len(
-            encoding.encode(model_response["choices"][0]["message"].get("content", ""))
+    ## LOGGING
+    logging_obj.post_call(
+            input=messages,
+            api_key=api_key,
+            original_response=response.text,
+            additional_args={"complete_input_dict": data},
         )
-
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
-        usage = Usage(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens
+    print_verbose(f"raw model_response: {response.text}")
+    ## RESPONSE OBJECT
+    completion_response = response.json()
+    if "error" in completion_response:
+        raise MaritalkError(
+            message=completion_response["error"],
+            status_code=response.status_code,
         )
-        model_response.usage = usage
-        return model_response
+    try:
+        if len(completion_response["answer"]) > 0:
+            model_response["choices"][0]["message"]["content"] = completion_response["answer"]
+    except Exception as e:
+        raise MaritalkError(message=response.text, status_code=response.status_code)
+
+    ## CALCULATING USAGE
+    prompt = "".join(m["content"] for m in messages)
+    prompt_tokens = len(
+        encoding.encode(prompt)
+    )
+    completion_tokens = len(
+        encoding.encode(model_response["choices"][0]["message"].get("content", ""))
+    )
+
+    model_response["created"] = int(time.time())
+    model = model
+
+    model_response["model"] = model
+    usage = Usage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens
+    )
+    model_response.usage = usage
+    return model_response
 
 def embedding(
     model: str,

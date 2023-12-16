@@ -225,10 +225,7 @@ class Router:
             kwargs["num_retries"] = kwargs.get("num_retries", self.num_retries)
             timeout = kwargs.get("request_timeout", self.timeout)
             kwargs.setdefault("metadata", {}).update({"model_group": model})
-            # response = await asyncio.wait_for(self.async_function_with_fallbacks(**kwargs), timeout=timeout)
-            response = await self.async_function_with_fallbacks(**kwargs)
-
-            return response
+            return await self.async_function_with_fallbacks(**kwargs)
         except Exception as e: 
             raise e
 
@@ -321,9 +318,14 @@ class Router:
                 data["model"] = original_model_string[:index_of_model_id]
             else:
                 data["model"] = original_model_string
-            # call via litellm.atext_completion()
-            response = await litellm.atext_completion(**{**data, "prompt": prompt, "caching": self.cache_responses, **kwargs}) # type: ignore
-            return response
+            return await litellm.atext_completion(
+                **{
+                    **data,
+                    "prompt": prompt,
+                    "caching": self.cache_responses,
+                    **kwargs,
+                }
+            )
         except Exception as e: 
             if self.num_retries > 0:
                 kwargs["model"] = model
@@ -373,7 +375,7 @@ class Router:
         
         return await litellm.aembedding(**{**data, "input": input, "caching": self.cache_responses, "client": model_client, **kwargs})
 
-    async def async_function_with_fallbacks(self, *args, **kwargs): 
+    async def async_function_with_fallbacks(self, *args, **kwargs):
         """
         Try calling the function_with_retries
         If it fails after num_retries, fall back to another model group
@@ -389,17 +391,19 @@ class Router:
             self.print_verbose(f"An exception occurs: {e}")
             original_exception = e
             try: 
-                self.print_verbose(f"Trying to fallback b/w models")
+                self.print_verbose("Trying to fallback b/w models")
                 if isinstance(e, litellm.ContextWindowExceededError) and context_window_fallbacks is not None: 
-                    fallback_model_group = None
-                    for item in context_window_fallbacks: # [{"gpt-3.5-turbo": ["gpt-4"]}]
-                        if list(item.keys())[0] == model_group:
-                            fallback_model_group = item[model_group]
-                            break
-                    
+                    fallback_model_group = next(
+                        (
+                            item[model_group]
+                            for item in context_window_fallbacks
+                            if list(item.keys())[0] == model_group
+                        ),
+                        None,
+                    )
                     if fallback_model_group is None: 
                         raise original_exception
-                    
+
                     for mg in fallback_model_group: 
                         """
                         Iterate through the model groups and try calling that deployment
@@ -443,9 +447,7 @@ class Router:
         self.print_verbose(f"async function w/ retries: original_function - {original_function}")
         num_retries = kwargs.pop("num_retries")
         try: 
-            # if the function call is successful, no exception will be raised and we'll break out of the loop
-            response = await original_function(*args, **kwargs)
-            return response
+            return await original_function(*args, **kwargs)
         except Exception as e: 
             original_exception = e
             ### CHECK IF RATE LIMIT / CONTEXT WINDOW ERROR w/ fallbacks available
@@ -465,11 +467,11 @@ class Router:
                 await asyncio.sleep(timeout)
             else: 
                 raise original_exception
-            
+
             ## LOGGING
             if num_retries > 0:
                 kwargs = self.log_retry(kwargs=kwargs, e=original_exception)
-            
+
             for current_attempt in range(num_retries):
                 self.print_verbose(f"retrying request. Current attempt - {current_attempt}; num retries: {num_retries}")
                 try:
@@ -478,7 +480,7 @@ class Router:
                     if inspect.iscoroutinefunction(response): # async errors are often returned as coroutines 
                         response = await response
                     return response
-                
+
                 except Exception as e: 
                     ## LOGGING
                     kwargs = self.log_retry(kwargs=kwargs, e=e)
@@ -496,7 +498,7 @@ class Router:
                         raise e
             raise original_exception
     
-    def function_with_fallbacks(self, *args, **kwargs): 
+    def function_with_fallbacks(self, *args, **kwargs):
         """
         Try calling the function_with_retries
         If it fails after num_retries, fall back to another model group
@@ -505,24 +507,24 @@ class Router:
         fallbacks = kwargs.get("fallbacks", self.fallbacks)
         context_window_fallbacks = kwargs.get("context_window_fallbacks", self.context_window_fallbacks)
         try: 
-            response = self.function_with_retries(*args, **kwargs)
-            return response
+            return self.function_with_retries(*args, **kwargs)
         except Exception as e:
             original_exception = e
             self.print_verbose(f"An exception occurs {original_exception}")
             try: 
                 self.print_verbose(f"Trying to fallback b/w models. Initial model group: {model_group}")
                 if isinstance(e, litellm.ContextWindowExceededError) and context_window_fallbacks is not None: 
-                    fallback_model_group = None
-
-                    for item in context_window_fallbacks: # [{"gpt-3.5-turbo": ["gpt-4"]}]
-                        if list(item.keys())[0] == model_group:
-                            fallback_model_group = item[model_group]
-                            break
-                    
+                    fallback_model_group = next(
+                        (
+                            item[model_group]
+                            for item in context_window_fallbacks
+                            if list(item.keys())[0] == model_group
+                        ),
+                        None,
+                    )
                     if fallback_model_group is None: 
                         raise original_exception
-                    
+
                     for mg in fallback_model_group: 
                         """
                         Iterate through the model groups and try calling that deployment
@@ -531,21 +533,22 @@ class Router:
                             ## LOGGING
                             kwargs = self.log_retry(kwargs=kwargs, e=original_exception)
                             kwargs["model"] = mg
-                            response = self.function_with_fallbacks(*args, **kwargs)
-                            return response 
+                            return self.function_with_fallbacks(*args, **kwargs)
                         except Exception as e: 
                             pass
                 elif fallbacks is not None: 
                     self.print_verbose(f"inside model fallbacks: {fallbacks}")
-                    fallback_model_group = None
-                    for item in fallbacks:
-                        if list(item.keys())[0] == model_group:
-                            fallback_model_group = item[model_group]
-                            break
-
+                    fallback_model_group = next(
+                        (
+                            item[model_group]
+                            for item in fallbacks
+                            if list(item.keys())[0] == model_group
+                        ),
+                        None,
+                    )
                     if fallback_model_group is None: 
                         raise original_exception
-                    
+
                     for mg in fallback_model_group: 
                         """
                         Iterate through the model groups and try calling that deployment
@@ -554,15 +557,14 @@ class Router:
                             ## LOGGING
                             kwargs = self.log_retry(kwargs=kwargs, e=original_exception)
                             kwargs["model"] = mg
-                            response = self.function_with_fallbacks(*args, **kwargs)
-                            return response 
+                            return self.function_with_fallbacks(*args, **kwargs)
                         except Exception as e: 
                             raise e
             except Exception as e: 
                 raise e
             raise original_exception
             
-    def function_with_retries(self, *args, **kwargs): 
+    def function_with_retries(self, *args, **kwargs):
         """
         Try calling the model 3 times. Shuffle between available deployments. 
         """
@@ -572,9 +574,7 @@ class Router:
         fallbacks = kwargs.pop("fallbacks", self.fallbacks)
         context_window_fallbacks = kwargs.pop("context_window_fallbacks", self.context_window_fallbacks)
         try: 
-            # if the function call is successful, no exception will be raised and we'll break out of the loop
-            response = original_function(*args, **kwargs)
-            return response
+            return original_function(*args, **kwargs)
         except Exception as e: 
             original_exception = e
             self.print_verbose(f"num retries in function with retries: {num_retries}")
@@ -589,10 +589,7 @@ class Router:
             for current_attempt in range(num_retries):
                 self.print_verbose(f"retrying request. Current attempt - {current_attempt}; retries left: {num_retries}")
                 try:
-                    # if the function call is successful, no exception will be raised and we'll break out of the loop
-                    response = original_function(*args, **kwargs)
-                    return response
-
+                    return original_function(*args, **kwargs)
                 except Exception as e: 
                     ## LOGGING
                     kwargs = self.log_retry(kwargs=kwargs, e=e)
@@ -623,8 +620,9 @@ class Router:
         completion. Purpose of this is to update TPM/RPM usage per model
         """
         model_name = kwargs.get('model', None)  # i.e. gpt35turbo
-        custom_llm_provider = kwargs.get("litellm_params", {}).get('custom_llm_provider', None)  # i.e. azure
-        if custom_llm_provider:
+        if custom_llm_provider := kwargs.get("litellm_params", {}).get(
+            'custom_llm_provider', None
+        ):
             model_name = f"{custom_llm_provider}/{model_name}"
         if kwargs["stream"] is True: 
             if kwargs.get("complete_streaming_response"):
@@ -633,7 +631,7 @@ class Router:
         else: 
             total_tokens = completion_response['usage']['total_tokens']
             self._set_deployment_usage(model_name, total_tokens)
-        
+
         self.deployment_latency_map[model_name] = (end_time - start_time).total_seconds()
 
     def deployment_callback_on_failure(
@@ -648,7 +646,7 @@ class Router:
             exception_status = getattr(exception, 'status_code', "")
             exception_cause = getattr(exception, '__cause__', "")
             exception_message = getattr(exception, 'message', "")
-            exception_str = str(exception_type) + "Status: " + str(exception_status) + "Message: " + str(exception_cause) + str(exception_message) + "Full exception" + str(exception)
+            exception_str = f"{str(exception_type)}Status: {str(exception_status)}Message: {str(exception_cause)}{str(exception_message)}Full exception{str(exception)}"
             model_name = kwargs.get('model', None)  # i.e. gpt35turbo
             custom_llm_provider = kwargs.get("litellm_params", {}).get('custom_llm_provider', None)  # i.e. azure
             metadata = kwargs.get("litellm_params", {}).get('metadata', None)
@@ -665,21 +663,21 @@ class Router:
                     self.print_verbose(f"Model {model} had {len(self.model_exception_map[model])} exception")
             if custom_llm_provider:
                 model_name = f"{custom_llm_provider}/{model_name}"
-            
+
         except Exception as e:
             raise e
 
-    def log_retry(self, kwargs: dict, e: Exception) -> dict: 
+    def log_retry(self, kwargs: dict, e: Exception) -> dict:
         """
         When a retry or fallback happens, log the details of the just failed model call - similar to Sentry breadcrumbing
         """
         try: 
             # Log failed model as the previous model
-            previous_model = {"exception_type": type(e).__name__, "exception_string": str(e)} 
+            previous_model = {"exception_type": type(e).__name__, "exception_string": str(e)}
             for k, v in kwargs.items(): # log everything in kwargs except the old previous_models value - prevent nesting 
                 if k != "metadata":
                     previous_model[k] = v
-                elif k == "metadata" and isinstance(v, dict): 
+                elif isinstance(v, dict): 
                     previous_model["metadata"] = {} # type: ignore
                     for metadata_k, metadata_v in kwargs['metadata'].items(): 
                         if metadata_k != "previous_models": 
@@ -704,7 +702,7 @@ class Router:
         current_fails = self.failed_calls.get_cache(key=deployment) or 0
         updated_fails = current_fails + 1
         self.print_verbose(f"Attempting to add {deployment} to cooldown list. updated_fails: {updated_fails}; self.allowed_fails: {self.allowed_fails}")
-        if updated_fails > self.allowed_fails:                
+        if updated_fails > self.allowed_fails:            
             # get the current cooldown list for that minute
             cooldown_key = f"{current_minute}:cooldown_models" # group cooldown models by minute to reduce number of redis calls
             cached_value = self.cache.get_cache(key=cooldown_key)
@@ -712,16 +710,14 @@ class Router:
             self.print_verbose(f"adding {deployment} to cooldown models")
             # update value
             try:
-                if deployment in cached_value: 
-                    pass
-                else: 
+                if deployment not in cached_value:
                     cached_value = cached_value + [deployment]
                     # save updated value
-                    self.cache.set_cache(value=cached_value, key=cooldown_key, ttl=1) 
+                    self.cache.set_cache(value=cached_value, key=cooldown_key, ttl=1)
             except:
                 cached_value = [deployment]
                 # save updated value
-                self.cache.set_cache(value=cached_value, key=cooldown_key, ttl=1) 
+                self.cache.set_cache(value=cached_value, key=cooldown_key, ttl=1)
         else:
             self.failed_calls.set_cache(key=deployment, value=updated_fails, ttl=1) 
 
@@ -748,21 +744,15 @@ class Router:
         """
         Returns a deployment with the lowest TPM/RPM usage.
         """
-        # get list of potential deployments
-        potential_deployments = []
-        for item in self.model_list:
-            if item["model_name"] == model:
-                potential_deployments.append(item)
-
+        potential_deployments = [
+            item for item in self.model_list if item["model_name"] == model
+        ]
         # get current call usage
         token_count = 0
         if messages is not None:
             token_count = litellm.token_counter(model=model, messages=messages)
         elif input is not None:
-            if isinstance(input, List):
-                input_text = "".join(text for text in input)
-            else:
-                input_text = input
+            input_text = "".join(input) if isinstance(input, List) else input
             token_count = litellm.token_counter(model=model, text=input_text)
 
         # -----------------------
@@ -885,12 +875,11 @@ class Router:
         total_latency = sum(latencies)
         # Calculate the weight for each latency (lower latency = higher weight)
         weights = [total_latency-latency for latency in latencies]
-        # Get a weighted random item
-        if sum(weights) == 0: 
-            chosen_item = random.choice(sorted_items)[0]
-        else: 
-            chosen_item = random.choices(sorted_items, weights=weights, k=1)[0][0]
-        return chosen_item
+        return (
+            random.choice(sorted_items)[0]
+            if sum(weights) == 0
+            else random.choices(sorted_items, weights=weights, k=1)[0][0]
+        )
 
     def set_model_list(self, model_list: list):
         self.model_list = copy.deepcopy(model_list)
@@ -1096,15 +1085,15 @@ class Router:
             The appropriate client based on the given client_type and kwargs.
         """
         if client_type == "async":
-            if kwargs.get("stream") == True:
-                return deployment.get("stream_async_client", None)
-            else:
-                return deployment.get("async_client", None)
+            return (
+                deployment.get("stream_async_client", None)
+                if kwargs.get("stream") == True
+                else deployment.get("async_client", None)
+            )
+        if kwargs.get("stream") == True:
+            return deployment.get("stream_client", None)
         else:
-            if kwargs.get("stream") == True:
-                return deployment.get("stream_client", None)
-            else:
-                return deployment.get("client", None)
+            return deployment.get("client", None)
 
     def print_verbose(self, print_statement): 
         try:
@@ -1143,16 +1132,16 @@ class Router:
         ## get healthy deployments
         ### get all deployments 
         healthy_deployments = [m for m in self.model_list if m["model_name"] == model]
-        if len(healthy_deployments) == 0: 
+        if not healthy_deployments: 
             # check if the user sent in a deployment name instead 
             healthy_deployments = [m for m in self.model_list if m["litellm_params"]["model"] == model]
 
         self.print_verbose(f"initial list of deployments: {healthy_deployments}")
 
         # filter out the deployments currently cooling down 
-        deployments_to_remove = [] 
+        deployments_to_remove = []
         # cooldown_deployments is a list of model_id's cooling down, cooldown_deployments = ["16700539-b3cd-42f4-b426-6a12a1bb706a", "16700539-b3cd-42f4-b426-7899"]
-        cooldown_deployments = self._get_cooldown_deployments() 
+        cooldown_deployments = self._get_cooldown_deployments()
         self.print_verbose(f"cooldown deployments: {cooldown_deployments}")
         # Find deployments in model_list whose model_id is cooling down
         for deployment in healthy_deployments: 
@@ -1164,7 +1153,7 @@ class Router:
             healthy_deployments.remove(deployment)
 
         self.print_verbose(f"healthy deployments: length {len(healthy_deployments)} {healthy_deployments}")
-        if len(healthy_deployments) == 0: 
+        if not healthy_deployments: 
             raise ValueError("No models available")
         if litellm.model_alias_map and model in litellm.model_alias_map:
             model = litellm.model_alias_map[
@@ -1179,15 +1168,11 @@ class Router:
                 if v < min_traffic:
                     min_deployment = k
             ############## No Available Deployments passed, we do a random pick #################
-            if min_deployment is None: 
-                min_deployment = random.choice(healthy_deployments)
-            ############## Available Deployments passed, we find the relevant item #################
-            else: 
+            if min_deployment is not None:
                 for m in healthy_deployments: 
                     if m["model_info"]["id"] == min_deployment:
                         return m
-                min_deployment = random.choice(healthy_deployments)
-            return min_deployment 
+            return random.choice(healthy_deployments)
         elif self.routing_strategy == "simple-shuffle": 
             # if users pass rpm or tpm, we do a random weighted pick - based on rpm/tpm
             ############## Check if we can do a RPM/TPM based weighted pick #################
@@ -1225,16 +1210,17 @@ class Router:
         elif self.routing_strategy == "latency-based-routing": 
             returned_item = None
             lowest_latency = float('inf')
-            ### shuffles with priority for lowest latency
-            # items_with_latencies = [('A', 10), ('B', 20), ('C', 30), ('D', 40)]
-            items_with_latencies = [] 
-            for item in healthy_deployments:
-                items_with_latencies.append((item, self.deployment_latency_map[item["litellm_params"]["model"]]))
-            returned_item = self.weighted_shuffle_by_latency(items_with_latencies)
-            return returned_item
+            items_with_latencies = [
+                (
+                    item,
+                    self.deployment_latency_map[item["litellm_params"]["model"]],
+                )
+                for item in healthy_deployments
+            ]
+            return self.weighted_shuffle_by_latency(items_with_latencies)
         elif self.routing_strategy == "usage-based-routing": 
             return self.get_usage_based_available_deployment(model=model, messages=messages, input=input)
-        
+
         raise ValueError("No models available.")
 
     def flush_cache(self):

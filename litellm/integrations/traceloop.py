@@ -18,9 +18,9 @@ class TraceloopLogger:
                 return
 
             with tracer.start_as_current_span(
-                "litellm.completion",
-                kind=SpanKind.CLIENT,
-            ) as span:
+                        "litellm.completion",
+                        kind=SpanKind.CLIENT,
+                    ) as span:
                 if span.is_recording():
                     span.set_attribute(
                         SpanAttributes.LLM_REQUEST_MODEL, kwargs.get("model")
@@ -45,8 +45,7 @@ class TraceloopLogger:
                     span.set_attribute(
                         SpanAttributes.LLM_RESPONSE_MODEL, response_obj.get("model")
                     )
-                    usage = response_obj.get("usage")
-                    if usage:
+                    if usage := response_obj.get("usage"):
                         span.set_attribute(
                             SpanAttributes.LLM_USAGE_TOTAL_TOKENS,
                             usage.get("total_tokens"),

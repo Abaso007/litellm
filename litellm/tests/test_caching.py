@@ -41,7 +41,7 @@ def test_caching_v2(): # test in memory cache
         if response2['choices'][0]['message']['content'] != response1['choices'][0]['message']['content']:
             print(f"response1: {response1}")
             print(f"response2: {response2}")
-            pytest.fail(f"Error occurred:")
+            pytest.fail("Error occurred:")
     except Exception as e:
         print(f"error occurred: {traceback.format_exc()}")
         pytest.fail(f"Error occurred: {e}")
@@ -67,11 +67,11 @@ def test_caching_with_models_v2():
         # if models are different, it should not return cached response
         print(f"response2: {response2}")
         print(f"response3: {response3}")
-        pytest.fail(f"Error occurred:")
+        pytest.fail("Error occurred:")
     if response1['choices'][0]['message']['content'] != response2['choices'][0]['message']['content']:
         print(f"response1: {response1}")
         print(f"response2: {response2}")
-        pytest.fail(f"Error occurred:")
+        pytest.fail("Error occurred:")
 # test_caching_with_models_v2()
 
 embedding_large_text = """
@@ -196,17 +196,19 @@ def test_redis_cache_completion():
         # 1&2 have the exact same input params. This MUST Be a CACHE HIT
         print(f"response1: {response1}")
         print(f"response2: {response2}")
-        pytest.fail(f"Error occurred:")
+        pytest.fail("Error occurred:")
     if response1['choices'][0]['message']['content'] == response3['choices'][0]['message']['content']:
         # if input params like seed, max_tokens are diff it should NOT be a cache hit
         print(f"response1: {response1}")
         print(f"response3: {response3}")
-        pytest.fail(f"Response 1 == response 3. Same model, diff params shoudl not cache Error occurred:")
+        pytest.fail(
+            "Response 1 == response 3. Same model, diff params shoudl not cache Error occurred:"
+        )
     if response1['choices'][0]['message']['content'] == response4['choices'][0]['message']['content']:
         # if models are different, it should not return cached response
         print(f"response1: {response1}")
         print(f"response4: {response4}")
-        pytest.fail(f"Error occurred:")
+        pytest.fail("Error occurred:")
 
 # test_redis_cache_completion()
 
@@ -333,9 +335,12 @@ def test_redis_cache_acompletion_stream_bedrock():
 # test_redis_cache_acompletion_stream_bedrock()
 # redis cache with custom keys
 def custom_get_cache_key(*args, **kwargs):
-    # return key to use for your cache: 
-    key = kwargs.get("model", "") + str(kwargs.get("messages", "")) + str(kwargs.get("temperature", "")) + str(kwargs.get("logit_bias", ""))
-    return key
+    return (
+        kwargs.get("model", "")
+        + str(kwargs.get("messages", ""))
+        + str(kwargs.get("temperature", ""))
+        + str(kwargs.get("logit_bias", ""))
+    )
 
 def test_custom_redis_cache_with_key():
     messages = [{"role": "user", "content": "write a one line story"}]
@@ -365,7 +370,7 @@ def test_custom_redis_cache_with_key():
     print(f"response3: {response3}")
 
     if response3['choices'][0]['message']['content'] == response2['choices'][0]['message']['content']:
-        pytest.fail(f"Error occurred:")
+        pytest.fail("Error occurred:")
     litellm.cache = None
     litellm.success_callback = []
     litellm._async_success_callback = []
@@ -426,7 +431,7 @@ def test_custom_redis_cache_params():
         litellm.success_callback = []
         litellm._async_success_callback = []
     except Exception as e:
-        pytest.fail(f"Error occurred:", e)
+        pytest.fail("Error occurred:", e)
 
 
 def test_get_cache_key():
@@ -481,7 +486,7 @@ def test_get_cache_key():
         print("passed!")
     except Exception as e:
         traceback.print_exc()
-        pytest.fail(f"Error occurred:", e)
+        pytest.fail("Error occurred:", e)
 
 test_get_cache_key()
 

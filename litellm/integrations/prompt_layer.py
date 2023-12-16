@@ -17,10 +17,7 @@ class PromptLayerLogger:
     def log_event(self, kwargs, response_obj, start_time, end_time, print_verbose):
         # Method definition
         try:
-            new_kwargs = {}
-            new_kwargs['model'] = kwargs['model']
-            new_kwargs['messages'] = kwargs['messages']
-
+            new_kwargs = {'model': kwargs['model'], 'messages': kwargs['messages']}
             # add kwargs["optional_params"] to new_kwargs
             for optional_param in kwargs["optional_params"]:
                 new_kwargs[optional_param] = kwargs["optional_params"][optional_param]
@@ -69,4 +66,3 @@ class PromptLayerLogger:
 
         except:
             print_verbose(f"error: Prompt Layer Error - {traceback.format_exc()}")
-            pass

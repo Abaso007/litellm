@@ -104,11 +104,10 @@ def start_prediction(version_id, input_data, api_token, api_base, logging_obj, p
     )
 
     response = requests.post(f"{base_url}/predictions", json=initial_prediction_data, headers=headers)
-    if response.status_code == 201:
-        response_data = response.json()
-        return response_data.get("urls", {}).get("get")
-    else:
+    if response.status_code != 201:
         raise ReplicateError(response.status_code, f"Failed to start prediction {response.text}")
+    response_data = response.json()
+    return response_data.get("urls", {}).get("get")
 
 # Function to handle prediction response (non-streaming)
 def handle_prediction_response(prediction_url, api_token, print_verbose):
@@ -120,7 +119,7 @@ def handle_prediction_response(prediction_url, api_token, print_verbose):
 
     status = ""
     logs = ""
-    while True and (status not in ["succeeded", "failed", "canceled"]):
+    while status not in ["succeeded", "failed", "canceled"]:
         print_verbose(f"replicate: polling endpoint: {prediction_url}")
         time.sleep(0.5)
         response = requests.get(prediction_url, headers=headers)
@@ -149,7 +148,7 @@ def handle_prediction_response_streaming(prediction_url, api_token, print_verbos
         "Content-Type": "application/json"
     }
     status = ""
-    while True and (status not in ["succeeded", "failed", "canceled"]):
+    while status not in ["succeeded", "failed", "canceled"]:
         time.sleep(0.5) # prevent being rate limited by replicate
         print_verbose(f"replicate: polling endpoint: {prediction_url}")
         response = requests.get(prediction_url, headers=headers)
@@ -196,24 +195,24 @@ def completion(
     # Start a prediction and get the prediction URL
     version_id = model_to_version_id(model)
     ## Load Config
-    config = litellm.ReplicateConfig.get_config() 
+    config = litellm.ReplicateConfig.get_config()
     for k, v in config.items(): 
         if k not in optional_params: # completion(top_k=3) > replicate_config(top_k=3) <- allows for dynamic variables to be passed in
             optional_params[k] = v
-    
+
     system_prompt = None
     if optional_params is not None and "supports_system_prompt" in optional_params:
         supports_sys_prompt = optional_params.pop("supports_system_prompt")
     else:
         supports_sys_prompt = False
-        
+
     if supports_sys_prompt:
         for i in range(len(messages)):
             if messages[i]["role"] == "system":
                 first_sys_message = messages.pop(i)
                 system_prompt = first_sys_message["content"]
                 break
-    
+
     if model in custom_prompt_dict:
         # check if the model has a registered custom prompt
         model_prompt_details = custom_prompt_dict[model]
@@ -279,7 +278,7 @@ def completion(
         # Calculate usage
         prompt_tokens = len(encoding.encode(prompt))
         completion_tokens = len(encoding.encode(model_response["choices"][0]["message"].get("content", "")))
-        model_response["model"] = "replicate/" + model
+        model_response["model"] = f"replicate/{model}"
         usage = Usage(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,

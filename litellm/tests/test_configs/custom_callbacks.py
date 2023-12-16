@@ -23,9 +23,9 @@ class testCustomCallbackProxy(CustomLogger):
         reset_color_code = "\033[0m"
         print(f"{blue_color_code}Initialized LiteLLM custom logger")
         try:
-            print(f"Logger Initialized with following methods:")
+            print("Logger Initialized with following methods:")
             methods = [method for method in dir(self) if inspect.ismethod(getattr(self, method))]
-            
+
             # Pretty print the methods
             for method in methods:
                 print(f" - {method}")
@@ -34,28 +34,28 @@ class testCustomCallbackProxy(CustomLogger):
             pass
 
     def log_pre_api_call(self, model, messages, kwargs): 
-        print(f"Pre-API Call")
+        print("Pre-API Call")
     
     def log_post_api_call(self, kwargs, response_obj, start_time, end_time): 
-        print(f"Post-API Call")
+        print("Post-API Call")
     
     def log_stream_event(self, kwargs, response_obj, start_time, end_time):
-        print(f"On Stream")
+        print("On Stream")
         
     def log_success_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Success")
+        print("On Success")
         self.success = True
 
     def log_failure_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Failure")
+        print("On Failure")
         self.failure = True
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Async success")
+        print("On Async success")
         self.async_success = True
         print("Value of async success: ", self.async_success)
         print("\n kwargs: ", kwargs)
-        if kwargs.get("model") == "azure-embedding-model" or kwargs.get("model") == "ada":
+        if kwargs.get("model") in ["azure-embedding-model", "ada"]:
             print("Got an embedding model", kwargs.get("model"))
             print("Setting embedding success to True")
             self.async_success_embedding = True
@@ -100,14 +100,14 @@ class testCustomCallbackProxy(CustomLogger):
 
     
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Async Failure")
+        print("On Async Failure")
         self.async_failure = True
         print("Value of async failure: ", self.async_failure)
         print("\n kwargs: ", kwargs)
         if kwargs.get("model") == "text-embedding-ada-002":
             self.async_failure_embedding = True
             self.async_embedding_kwargs_fail = kwargs
-        
+
         self.async_completion_kwargs_fail = kwargs
 
 my_custom_logger = testCustomCallbackProxy()

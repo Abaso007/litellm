@@ -14,7 +14,7 @@ import pytest
 
 
 def pre_request():
-    file_name = f"dynamo.log"
+    file_name = "dynamo.log"
     log_file = open(file_name, "a+")
 
     # Clear the contents of the file by truncating it

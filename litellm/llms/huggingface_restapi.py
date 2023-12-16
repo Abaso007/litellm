@@ -179,34 +179,39 @@ class Huggingface(BaseLLM):
                 model_response["choices"][0]["message"][
                     "content"
                 ] = output_parser(completion_response[0]["generated_text"])
-            ## GETTING LOGPROBS + FINISH REASON 
+            ## GETTING LOGPROBS + FINISH REASON
             if "details" in completion_response[0] and "tokens" in completion_response[0]["details"]:
                 model_response.choices[0].finish_reason = completion_response[0]["details"]["finish_reason"]
-                sum_logprob = 0
-                for token in completion_response[0]["details"]["tokens"]:
-                    if token["logprob"] != None:
-                        sum_logprob += token["logprob"]
+                sum_logprob = sum(
+                    token["logprob"]
+                    for token in completion_response[0]["details"]["tokens"]
+                    if token["logprob"] != None
+                )
                 model_response["choices"][0]["message"]._logprob = sum_logprob
             if "best_of" in optional_params and optional_params["best_of"] > 1: 
                 if "details" in completion_response[0] and "best_of_sequences" in completion_response[0]["details"]:
                     choices_list = []
                     for idx, item in enumerate(completion_response[0]["details"]["best_of_sequences"]):
-                        sum_logprob = 0
-                        for token in item["tokens"]:
-                            if token["logprob"] != None:
-                                sum_logprob += token["logprob"]
-                        if len(item["generated_text"]) > 0: 
-                            message_obj = Message(content=output_parser(item["generated_text"]), logprobs=sum_logprob)
-                        else: 
-                            message_obj = Message(content=None)
+                        sum_logprob = sum(
+                            token["logprob"]
+                            for token in item["tokens"]
+                            if token["logprob"] != None
+                        )
+                        message_obj = (
+                            Message(
+                                content=output_parser(item["generated_text"]),
+                                logprobs=sum_logprob,
+                            )
+                            if len(item["generated_text"]) > 0
+                            else Message(content=None)
+                        )
                         choice_obj = Choices(finish_reason=item["finish_reason"], index=idx+1, message=message_obj)
                         choices_list.append(choice_obj)
                     model_response["choices"].extend(choices_list)
-        else:
-            if len(completion_response[0]["generated_text"]) > 0: 
-                model_response["choices"][0]["message"][
-                    "content"
-                ] = output_parser(completion_response[0]["generated_text"])
+        elif len(completion_response[0]["generated_text"]) > 0: 
+            model_response["choices"][0]["message"][
+                "content"
+            ] = output_parser(completion_response[0]["generated_text"])
         ## CALCULATING USAGE
         prompt_tokens = 0
         try:
@@ -217,8 +222,8 @@ class Huggingface(BaseLLM):
             # this should remain non blocking we should not block a response returning if calculating usage fails
             pass
         output_text = model_response["choices"][0]["message"].get("content", "")
+        completion_tokens = 0
         if output_text is not None and len(output_text) > 0:
-            completion_tokens = 0
             try:
                 completion_tokens = len(
                     encoding.encode(model_response["choices"][0]["message"].get("content", ""))
@@ -226,9 +231,6 @@ class Huggingface(BaseLLM):
             except:
                 # this should remain non blocking we should not block a response returning if calculating usage fails
                 pass
-        else: 
-            completion_tokens = 0
-
         model_response["created"] = int(time.time())
         model_response["model"] = model
         usage = Usage(
@@ -294,7 +296,7 @@ class Huggingface(BaseLLM):
                         if text != "":
                             past_user_inputs.append(text)
                         text = message["content"]
-                    elif message["role"] == "assistant" or message["role"] == "system":
+                    elif message["role"] in ["assistant", "system"]:
                         generated_responses.append(message["content"])
                 data = {
                     "inputs": {
@@ -321,7 +323,8 @@ class Huggingface(BaseLLM):
                 data = {
                     "inputs": prompt,
                     "parameters": optional_params,
-                    "stream": True if "stream" in optional_params and optional_params["stream"] == True else False,
+                    "stream": "stream" in optional_params
+                    and optional_params["stream"] == True,
                 }
                 input_text = prompt
             else:
@@ -346,7 +349,8 @@ class Huggingface(BaseLLM):
                 data = {
                     "inputs": prompt,
                     "parameters": inference_params,
-                    "stream": True if "stream" in optional_params and optional_params["stream"] == True else False,
+                    "stream": "stream" in optional_params
+                    and optional_params["stream"] == True,
                 }
                 input_text = prompt
             ## LOGGING
@@ -355,9 +359,7 @@ class Huggingface(BaseLLM):
                     api_key=api_key,
                     additional_args={"complete_input_dict": data, "task": task, "headers": headers, "api_base": completion_url, "acompletion": acompletion},
                 )
-            ## COMPLETION CALL
-            if acompletion is True: 
-                ### ASYNC STREAMING 
+            if acompletion:
                 if optional_params.get("stream", False):
                     return self.async_streaming(logging_obj=logging_obj, api_base=completion_url, data=data, headers=headers, model_response=model_response, model=model) # type: ignore
                 else:
@@ -372,7 +374,6 @@ class Huggingface(BaseLLM):
                     stream=optional_params["stream"]
                 )
                 return response.iter_lines()
-            ### SYNC COMPLETION
             else:
                 response = requests.post(
                     completion_url, 
@@ -380,17 +381,17 @@ class Huggingface(BaseLLM):
                     data=json.dumps(data)
                 )
 
-                ## Some servers might return streaming responses even though stream was not set to true. (e.g. Baseten)
-                is_streamed = False 
-                if response.__dict__['headers'].get("Content-Type", "") == "text/event-stream":
-                    is_streamed = True
-                
+                is_streamed = (
+                    response.__dict__['headers'].get("Content-Type", "")
+                    == "text/event-stream"
+                )
                 # iterate over the complete streamed response, and return the final answer
                 if is_streamed:
                     streamed_response = CustomStreamWrapper(completion_stream=response.iter_lines(), model=model, custom_llm_provider="huggingface", logging_obj=logging_obj)
-                    content = ""
-                    for chunk in streamed_response: 
-                        content += chunk["choices"][0]["delta"]["content"]
+                    content = "".join(
+                        chunk["choices"][0]["delta"]["content"]
+                        for chunk in streamed_response
+                    )
                     completion_response: List[Dict[str, Any]] = [{"generated_text": content}]
                     ## LOGGING
                     logging_obj.post_call(
@@ -438,11 +439,10 @@ class Huggingface(BaseLLM):
             exception_mapping_worked = True
             raise e
         except Exception as e: 
-            if exception_mapping_worked: 
+            if exception_mapping_worked:
                 raise e
-            else: 
-                import traceback
-                raise HuggingfaceError(status_code=500, message=traceback.format_exc())
+            import traceback
+            raise HuggingfaceError(status_code=500, message=traceback.format_exc())
 
     async def acompletion(self, 
                           api_base: str, 

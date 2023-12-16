@@ -41,14 +41,14 @@ kwargs = {"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "He
 def test_multiple_deployments_sync(): 
 	import concurrent, time
 	litellm.set_verbose=False
-	results = [] 
+	results = []
 	router = Router(model_list=model_list, 
-                redis_host=os.getenv("REDIS_HOST"), 
-                redis_password=os.getenv("REDIS_PASSWORD"), 
-                redis_port=int(os.getenv("REDIS_PORT")),  # type: ignore
-                routing_strategy="simple-shuffle",
-                set_verbose=True,
-                num_retries=1) # type: ignore
+	redis_host=os.getenv("REDIS_HOST"), 
+	redis_password=os.getenv("REDIS_PASSWORD"), 
+	redis_port=int(os.getenv("REDIS_PORT")),  # type: ignore
+	routing_strategy="simple-shuffle",
+	set_verbose=True,
+	num_retries=1) # type: ignore
 	try:
 		for _ in range(3): 
 			response = router.completion(**kwargs)
@@ -56,7 +56,7 @@ def test_multiple_deployments_sync():
 		print(results)
 		router.reset()
 	except Exception as e:
-		print(f"FAILED TEST!")
+		print("FAILED TEST!")
 		pytest.fail(f"An error occurred - {traceback.format_exc()}")
 
 # test_multiple_deployments_sync()
@@ -102,67 +102,65 @@ def test_multiple_deployments_parallel():
 
 # test_multiple_deployments_parallel()
 def test_cooldown_same_model_name():
-    # users could have the same model with different api_base
-    # example 
-    # azure/chatgpt, api_base: 1234
-    # azure/chatgpt, api_base: 1235
-    # if 1234 fails, it should only cooldown 1234 and then try with 1235
-    litellm.set_verbose = False
-    try:
-        print("testing cooldown same model name")
-        model_list = [
-            {
-                "model_name": "gpt-3.5-turbo",
-                "litellm_params": {
-                    "model": "azure/chatgpt-v-2",
-                    "api_key": os.getenv("AZURE_API_KEY"),
-                    "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": "BAD_API_BASE",
-                    "tpm": 90
-                },
-            },
-            {
-                "model_name": "gpt-3.5-turbo",
-                "litellm_params": {
-                    "model": "azure/chatgpt-v-2",
-                    "api_key": os.getenv("AZURE_API_KEY"),
-                    "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
-                    "tpm": 0.000001
-                },
-            },
-        ]
+	# users could have the same model with different api_base
+	# example 
+	# azure/chatgpt, api_base: 1234
+	# azure/chatgpt, api_base: 1235
+	# if 1234 fails, it should only cooldown 1234 and then try with 1235
+	litellm.set_verbose = False
+	try:
+		print("testing cooldown same model name")
+		model_list = [
+		    {
+		        "model_name": "gpt-3.5-turbo",
+		        "litellm_params": {
+		            "model": "azure/chatgpt-v-2",
+		            "api_key": os.getenv("AZURE_API_KEY"),
+		            "api_version": os.getenv("AZURE_API_VERSION"),
+		            "api_base": "BAD_API_BASE",
+		            "tpm": 90
+		        },
+		    },
+		    {
+		        "model_name": "gpt-3.5-turbo",
+		        "litellm_params": {
+		            "model": "azure/chatgpt-v-2",
+		            "api_key": os.getenv("AZURE_API_KEY"),
+		            "api_version": os.getenv("AZURE_API_VERSION"),
+		            "api_base": os.getenv("AZURE_API_BASE"),
+		            "tpm": 0.000001
+		        },
+		    },
+		]
 
-        router = Router(
-            model_list=model_list,
-            redis_host=os.getenv("REDIS_HOST"),
-            redis_password=os.getenv("REDIS_PASSWORD"),
-            redis_port=int(os.getenv("REDIS_PORT")),
-            routing_strategy="simple-shuffle",
-            set_verbose=True,
-            num_retries=3
-        )  # type: ignore
+		router = Router(
+		    model_list=model_list,
+		    redis_host=os.getenv("REDIS_HOST"),
+		    redis_password=os.getenv("REDIS_PASSWORD"),
+		    redis_port=int(os.getenv("REDIS_PORT")),
+		    routing_strategy="simple-shuffle",
+		    set_verbose=True,
+		    num_retries=3
+		)  # type: ignore
 
-        response = router.completion(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "user",
-                    "content": "hello this request will pass"
-                }
-            ]
-        )
-        print(router.model_list)
-        model_ids = []
-        for model in router.model_list:
-            model_ids.append(model["model_info"]["id"])
-        print("\n litellm model ids ", model_ids)
+		response = router.completion(
+		    model="gpt-3.5-turbo",
+		    messages=[
+		        {
+		            "role": "user",
+		            "content": "hello this request will pass"
+		        }
+		    ]
+		)
+		print(router.model_list)
+		model_ids = [model["model_info"]["id"] for model in router.model_list]
+		print("\n litellm model ids ", model_ids)
 
-        # example litellm_model_names ['azure/chatgpt-v-2-ModelID-64321', 'azure/chatgpt-v-2-ModelID-63960']
-        assert model_ids[0] != model_ids[1] # ensure both models have a uuid added, and they have different names
+		# example litellm_model_names ['azure/chatgpt-v-2-ModelID-64321', 'azure/chatgpt-v-2-ModelID-63960']
+		assert model_ids[0] != model_ids[1] # ensure both models have a uuid added, and they have different names
 
-        print("\ngot response\n", response)
-    except Exception as e:
-        pytest.fail(f"Got unexpected exception on router! - {e}")
+		print("\ngot response\n", response)
+	except Exception as e:
+	    pytest.fail(f"Got unexpected exception on router! - {e}")
 
 test_cooldown_same_model_name()
