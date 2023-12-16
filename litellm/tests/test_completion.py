@@ -154,7 +154,6 @@ def test_completion_gpt4_turbo():
         print(response)
     except openai.RateLimitError:
         print("got a rate liimt error")
-        pass
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 # test_completion_gpt4_turbo()
@@ -186,7 +185,6 @@ def test_completion_gpt4_vision():
         print(response)
     except openai.RateLimitError:
         print("got a rate liimt error")
-        pass
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 # test_completion_gpt4_vision()
@@ -295,7 +293,7 @@ def test_get_hf_task_for_model():
     model = "roneneldan/TinyStories-3M"
     model_type = litellm.llms.huggingface_restapi.get_hf_task_for_model(model)
     print(f"model:{model}, model type: {model_type}")
-    assert(model_type == None)
+    assert model_type is None
 
 # test_get_hf_task_for_model()
 # litellm.set_verbose=False
@@ -740,6 +738,7 @@ def test_azure_openai_ad_token():
         if kwargs["additional_args"]["headers"]["Authorization"] != 'Bearer gm':
             pytest.fail("AZURE AD TOKEN Passed but not set in request header")
         return
+
     litellm.input_callback = [tester]
     try:
         response = litellm.completion(
@@ -757,7 +756,6 @@ def test_azure_openai_ad_token():
         litellm.input_callback = []
     except:
         litellm.input_callback = []
-        pass
 # test_azure_openai_ad_token()
 
 
@@ -1097,8 +1095,7 @@ def test_customprompt_together_ai():
         )
         print(response)
     except litellm.exceptions.Timeout as e:
-        print(f"Timeout Error")
-        pass
+        print("Timeout Error")
     except Exception as e:
         print(f"ERROR TYPE {type(e)}")
         pytest.fail(f"Error occurred: {e}")
@@ -1132,12 +1129,11 @@ def test_completion_chat_sagemaker():
             temperature=0.7,
             stream=True,
         )
-        # Add any assertions here to check the response 
-        complete_response = "" 
-        for chunk in response:
-            complete_response += chunk.choices[0].delta.content or "" 
+        complete_response = "".join(
+            chunk.choices[0].delta.content or "" for chunk in response
+        )
         print(f"complete_response: {complete_response}")
-        assert len(complete_response) > 0
+        assert complete_response != ""
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 # test_completion_chat_sagemaker()
@@ -1388,7 +1384,9 @@ def test_completion_bedrock_claude_completion_auth():
 # test_completion_custom_api_base()
 
 def test_completion_with_fallbacks():
-    print(f"RUNNING TEST COMPLETION WITH FALLBACKS -  test_completion_with_fallbacks")
+    print(
+        "RUNNING TEST COMPLETION WITH FALLBACKS -  test_completion_with_fallbacks"
+    )
     fallbacks = ["gpt-3.5-turbo", "gpt-3.5-turbo", "command-nightly"]
     try:
         response = completion(
@@ -1434,7 +1432,6 @@ def test_azure_cloudflare_api():
         print(f"response: {response}")
     except Exception as e: 
         traceback.print_exc()
-        pass
 
 # test_azure_cloudflare_api() 
 

@@ -16,7 +16,7 @@ class MaxParallelRequestsHandler(CustomLogger):
 
     
     async def async_pre_call_hook(self, user_api_key_dict: UserAPIKeyAuth, cache: DualCache, data: dict, call_type: str): 
-        self.print_verbose(f"Inside Max Parallel Request Pre-Call Hook")
+        self.print_verbose("Inside Max Parallel Request Pre-Call Hook")
         api_key = user_api_key_dict.api_key
         max_parallel_requests = user_api_key_dict.max_parallel_requests
 
@@ -25,7 +25,7 @@ class MaxParallelRequestsHandler(CustomLogger):
 
         if max_parallel_requests is None:
             return
-        
+
         self.user_api_key_cache = cache # save the api key cache for updating the value
 
         # CHECK IF REQUEST ALLOWED
@@ -43,11 +43,11 @@ class MaxParallelRequestsHandler(CustomLogger):
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
         try: 
-            self.print_verbose(f"INSIDE ASYNC SUCCESS LOGGING")
+            self.print_verbose("INSIDE ASYNC SUCCESS LOGGING")
             user_api_key = kwargs["litellm_params"]["metadata"]["user_api_key"]
             if user_api_key is None:
                 return
-            
+
             request_count_api_key = f"{user_api_key}_request_count"
             # check if it has collected an entire stream response
             self.print_verbose(f"'complete_streaming_response' is in kwargs: {'complete_streaming_response' in kwargs}")
@@ -62,17 +62,18 @@ class MaxParallelRequestsHandler(CustomLogger):
 
     async def async_log_failure_call(self, user_api_key_dict: UserAPIKeyAuth, original_exception: Exception):
         try:
-            self.print_verbose(f"Inside Max Parallel Request Failure Hook")
+            self.print_verbose("Inside Max Parallel Request Failure Hook")
             api_key = user_api_key_dict.api_key
             if api_key is None:
                 return
-            
+
             ## decrement call count if call failed
-            if (hasattr(original_exception, "status_code") 
-                and original_exception.status_code == 429 
-                and "Max parallel request limit reached" in str(original_exception)):
-                pass # ignore failed calls due to max limit being reached
-            else:  
+            if (
+                not hasattr(original_exception, "status_code")
+                or original_exception.status_code != 429
+                or "Max parallel request limit reached"
+                not in str(original_exception)
+            ):
                 request_count_api_key = f"{api_key}_request_count"
                 # Decrease count for this token
                 current = self.user_api_key_cache.get_cache(key=request_count_api_key) or 1

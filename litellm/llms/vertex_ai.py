@@ -61,8 +61,7 @@ def _get_image_bytes_from_url(image_url: str) -> bytes:
     try:
         response = requests.get(image_url)
         response.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
-        image_bytes = response.content
-        return image_bytes
+        return response.content
     except requests.exceptions.RequestException as e:
         # Handle any request exceptions (e.g., connection error, timeout)
         return b''  # Return an empty bytes object or handle the error as needed
@@ -150,11 +149,6 @@ def _gemini_vision_convert_messages(
                 # Case 2: Images with direct links
                 image = _load_image_from_url(img)
                 processed_images.append(image)
-            elif ".mp4" in img and "gs://" in img:
-                # Case 3: Videos with Cloud Storage URIs
-                part_mime = "video/mp4"
-                google_clooud_part = Part.from_uri(img, mime_type=part_mime)
-                processed_images.append(google_clooud_part)
         return prompt, processed_images
     except Exception as e:
         raise e
@@ -225,15 +219,15 @@ def completion(
             llm_model = CodeChatModel.from_pretrained(model)
             mode = "chat"
             request_str += f"llm_model = CodeChatModel.from_pretrained({model})\n"
-        
-        if acompletion == True: # [TODO] expand support to vertex ai chat + text models 
+
+        if acompletion: # [TODO] expand support to vertex ai chat + text models 
             if optional_params.get("stream", False) is True: 
                 # async streaming
                 return async_streaming(llm_model=llm_model, mode=mode, prompt=prompt, logging_obj=logging_obj, request_str=request_str, model=model, model_response=model_response, **optional_params)
             return async_completion(llm_model=llm_model, mode=mode, prompt=prompt, logging_obj=logging_obj, request_str=request_str, model=model, model_response=model_response, encoding=encoding, **optional_params)
 
-        if mode == "":
-            chat = llm_model.start_chat() 
+        if not mode:
+            chat = llm_model.start_chat()
             request_str+= f"chat = llm_model.start_chat()\n"
 
             if "stream" in optional_params and optional_params["stream"] == True:
@@ -244,36 +238,6 @@ def completion(
                 model_response = chat.send_message(prompt, generation_config=GenerationConfig(**optional_params), stream=stream)
                 optional_params["stream"] = True
                 return model_response
-        elif mode == "vision":
-            print_verbose("\nMaking VertexAI Gemini Pro Vision Call")
-            print_verbose(f"\nProcessing input messages = {messages}")
-
-            prompt, images = _gemini_vision_convert_messages(messages=messages)
-            content = [prompt] + images
-            if "stream" in optional_params and optional_params["stream"] == True:
-                stream = optional_params.pop("stream")
-                request_str += f"response = llm_model.generate_content({content}, generation_config=GenerationConfig(**{optional_params}), stream={stream})\n"
-                logging_obj.pre_call(input=prompt, api_key=None, additional_args={"complete_input_dict": optional_params, "request_str": request_str})
-                
-                model_response = llm_model.generate_content(
-                    contents=content,
-                    generation_config=GenerationConfig(**optional_params),
-                    stream=True
-                )
-                optional_params["stream"] = True
-                return model_response
-
-            request_str += f"response = llm_model.generate_content({content})\n"
-            ## LOGGING
-            logging_obj.pre_call(input=prompt, api_key=None, additional_args={"complete_input_dict": optional_params, "request_str": request_str})
-            
-            ## LLM Call
-            response = llm_model.generate_content(
-                contents=content,
-                generation_config=GenerationConfig(**optional_params)
-            )
-            completion_response = response.text
-            response_obj = response._raw_response
         elif mode == "chat":
             chat = llm_model.start_chat()
             request_str+= f"chat = llm_model.start_chat()\n"
@@ -308,14 +272,44 @@ def completion(
             ## LOGGING
             logging_obj.pre_call(input=prompt, api_key=None, additional_args={"complete_input_dict": optional_params, "request_str": request_str})
             completion_response = llm_model.predict(prompt, **optional_params).text
-            
+
+        elif mode == "vision":
+            print_verbose("\nMaking VertexAI Gemini Pro Vision Call")
+            print_verbose(f"\nProcessing input messages = {messages}")
+
+            prompt, images = _gemini_vision_convert_messages(messages=messages)
+            content = [prompt] + images
+            if "stream" in optional_params and optional_params["stream"] == True:
+                stream = optional_params.pop("stream")
+                request_str += f"response = llm_model.generate_content({content}, generation_config=GenerationConfig(**{optional_params}), stream={stream})\n"
+                logging_obj.pre_call(input=prompt, api_key=None, additional_args={"complete_input_dict": optional_params, "request_str": request_str})
+
+                model_response = llm_model.generate_content(
+                    contents=content,
+                    generation_config=GenerationConfig(**optional_params),
+                    stream=True
+                )
+                optional_params["stream"] = True
+                return model_response
+
+            request_str += f"response = llm_model.generate_content({content})\n"
+            ## LOGGING
+            logging_obj.pre_call(input=prompt, api_key=None, additional_args={"complete_input_dict": optional_params, "request_str": request_str})
+
+            ## LLM Call
+            response = llm_model.generate_content(
+                contents=content,
+                generation_config=GenerationConfig(**optional_params)
+            )
+            completion_response = response.text
+            response_obj = response._raw_response
         ## LOGGING
         logging_obj.post_call(
             input=prompt, api_key=None, original_response=completion_response
         )
 
         ## RESPONSE OBJECT
-        if len(str(completion_response)) > 0: 
+        if str(completion_response) != "": 
             model_response["choices"][0]["message"][
                 "content"
             ] = str(completion_response)
@@ -352,7 +346,7 @@ async def async_completion(llm_model, mode: str, prompt: str, model: str, model_
     try: 
         from vertexai.preview.generative_models import GenerationConfig
 
-        if mode == "":
+        if not mode:
             # gemini-pro
             chat = llm_model.start_chat()
             ## LOGGING
@@ -381,7 +375,7 @@ async def async_completion(llm_model, mode: str, prompt: str, model: str, model_
         )
 
         ## RESPONSE OBJECT
-        if len(str(completion_response)) > 0: 
+        if str(completion_response) != "": 
             model_response["choices"][0]["message"][
                 "content"
             ] = str(completion_response)
@@ -416,7 +410,7 @@ async def async_streaming(llm_model, mode: str, prompt: str, model: str, model_r
     Add support for async streaming calls for gemini-pro
     """
     from vertexai.preview.generative_models import GenerationConfig
-    if mode == "": 
+    if not mode:
         # gemini-pro
         chat = llm_model.start_chat()
         stream = optional_params.pop("stream")

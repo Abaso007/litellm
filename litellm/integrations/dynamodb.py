@@ -64,7 +64,7 @@ class DyanmoDBLogger:
 
 
             print_verbose(f"\nDynamoDB Logger - Logging payload = {payload}")
-            
+
             # put data in dyanmo DB
             table = self.dynamodb.Table(self.table_name)
             # Assuming log_data is a dictionary with log information
@@ -79,4 +79,3 @@ class DyanmoDBLogger:
         except:
             traceback.print_exc()
             print_verbose(f"DynamoDB Layer Error - {traceback.format_exc()}")
-            pass

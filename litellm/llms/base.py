@@ -6,20 +6,14 @@ from typing import Optional
 class BaseLLM:
     _client_session: Optional[httpx.Client] = None
     def create_client_session(self):
-        if litellm.client_session: 
-            _client_session = litellm.client_session
-        else: 
-            _client_session = httpx.Client()
-        
-        return _client_session
+        return litellm.client_session if litellm.client_session else httpx.Client()
     
     def create_aclient_session(self):
-        if litellm.aclient_session: 
-            _aclient_session = litellm.aclient_session
-        else: 
-            _aclient_session = httpx.AsyncClient()
-        
-        return _aclient_session
+        return (
+            litellm.aclient_session
+            if litellm.aclient_session
+            else httpx.AsyncClient()
+        )
     
     def __exit__(self):
         if hasattr(self, '_client_session'):

@@ -62,23 +62,23 @@ def is_port_in_use(port):
 @click.option('--num_workers', default=1, help='Number of uvicorn workers to spin up')
 @click.option('--api_base', default=None, help='API base URL.')
 @click.option('--api_version', default="2023-07-01-preview", help='For azure - pass in the api version.')
-@click.option('--model', '-m', default=None, help='The model name to pass to litellm expects') 
-@click.option('--alias', default=None, help='The alias for the model - use this to give a litellm model name (e.g. "huggingface/codellama/CodeLlama-7b-Instruct-hf") a more user-friendly name ("codellama")') 
-@click.option('--add_key', default=None, help='The model name to pass to litellm expects') 
-@click.option('--headers', default=None, help='headers for the API call') 
+@click.option('--model', '-m', default=None, help='The model name to pass to litellm expects')
+@click.option('--alias', default=None, help='The alias for the model - use this to give a litellm model name (e.g. "huggingface/codellama/CodeLlama-7b-Instruct-hf") a more user-friendly name ("codellama")')
+@click.option('--add_key', default=None, help='The model name to pass to litellm expects')
+@click.option('--headers', default=None, help='headers for the API call')
 @click.option('--save', is_flag=True, type=bool, help='Save the model-specific config')
-@click.option('--debug', default=False, is_flag=True, type=bool, help='To debug the input') 
-@click.option('--use_queue', default=False, is_flag=True, type=bool, help='To use celery workers for async endpoints') 
-@click.option('--temperature', default=None, type=float, help='Set temperature for the model') 
-@click.option('--max_tokens', default=None, type=int, help='Set max tokens for the model') 
-@click.option('--request_timeout', default=600, type=int, help='Set timeout in seconds for completion calls') 
-@click.option('--drop_params', is_flag=True, help='Drop any unmapped params') 
-@click.option('--add_function_to_prompt', is_flag=True, help='If function passed but unsupported, pass it as prompt') 
-@click.option('--config', '-c', default=None, help='Path to the proxy configuration file (e.g. config.yaml). Usage `litellm --config config.yaml`')  
-@click.option('--max_budget', default=None, type=float, help='Set max budget for API calls - works for hosted models like OpenAI, TogetherAI, Anthropic, etc.`') 
-@click.option('--telemetry', default=True, type=bool, help='Helps us know if people are using this feature. Turn this off by doing `--telemetry False`') 
-@click.option('--version', '-v', default=False, is_flag=True, type=bool, help='Print LiteLLM version') 
-@click.option('--logs', flag_value=False, type=int, help='Gets the "n" most recent logs. By default gets most recent log.') 
+@click.option('--debug', default=False, is_flag=True, type=bool, help='To debug the input')
+@click.option('--use_queue', default=False, is_flag=True, type=bool, help='To use celery workers for async endpoints')
+@click.option('--temperature', default=None, type=float, help='Set temperature for the model')
+@click.option('--max_tokens', default=None, type=int, help='Set max tokens for the model')
+@click.option('--request_timeout', default=600, type=int, help='Set timeout in seconds for completion calls')
+@click.option('--drop_params', is_flag=True, help='Drop any unmapped params')
+@click.option('--add_function_to_prompt', is_flag=True, help='If function passed but unsupported, pass it as prompt')
+@click.option('--config', '-c', default=None, help='Path to the proxy configuration file (e.g. config.yaml). Usage `litellm --config config.yaml`')
+@click.option('--max_budget', default=None, type=float, help='Set max budget for API calls - works for hosted models like OpenAI, TogetherAI, Anthropic, etc.`')
+@click.option('--telemetry', default=True, type=bool, help='Helps us know if people are using this feature. Turn this off by doing `--telemetry False`')
+@click.option('--version', '-v', default=False, is_flag=True, type=bool, help='Print LiteLLM version')
+@click.option('--logs', flag_value=False, type=int, help='Gets the "n" most recent logs. By default gets most recent log.')
 @click.option('--health', flag_value=True, help='Make a chat/completions request to all llms in config.yaml')
 @click.option('--test', flag_value=True, help='proxy chat completions url to make a test request to')
 @click.option('--test_async', default=False, is_flag=True, help='Calls async endpoints /queue/requests and /queue/response')
@@ -178,7 +178,7 @@ def run_server(host, port, api_base, api_version, model, alias, add_key, headers
                     failed_calls += 1
         end_time = time.time()
         print(f"Elapsed Time: {end_time-start_time}")
-        print(f"Load test Summary:")
+        print("Load test Summary:")
         print(f"Total Requests: {concurrent_calls}")
         print(f"Successful Calls: {successful_calls}")
         print(f"Failed Calls: {failed_calls}")
@@ -192,10 +192,7 @@ def run_server(host, port, api_base, api_version, model, alias, add_key, headers
     if test != False:
         click.echo('\nLiteLLM: Making a test ChatCompletions request to your proxy')
         import openai
-        if test == True: # flag value set
-            api_base = f"http://{host}:{port}"
-        else: 
-            api_base = test
+        api_base = f"http://{host}:{port}" if test == True else test
         client = openai.OpenAI(
             api_key="My API Key",
             base_url=api_base

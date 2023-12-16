@@ -177,12 +177,12 @@ def test_chat_completion_stream(client):
         print("initialized proxy")
         # import the initialized custom logger
         print(litellm.callbacks)
-        
+
 
         print("LiteLLM Callbacks", litellm.callbacks)
         print("my_custom_logger", my_custom_logger)
 
-        assert my_custom_logger.streaming_response_obj == None  # no streaming response obj is set pre call
+        assert my_custom_logger.streaming_response_obj is None
 
         test_data = {
             "model": "Azure OpenAI GPT-4 Canada",

@@ -193,10 +193,10 @@ def test_add_new_model(client_no_auth):
 from litellm.integrations.custom_logger import CustomLogger
 class MyCustomHandler(CustomLogger):
     def log_pre_api_call(self, model, messages, kwargs): 
-        print(f"Pre-API Call")
+        print("Pre-API Call")
 
     def log_success_event(self, kwargs, response_obj, start_time, end_time): 
-        print(f"On Success")
+        print("On Success")
         assert kwargs["user"] == "proxy-user"
         assert kwargs["model"] == "gpt-3.5-turbo"
         assert kwargs["max_tokens"] == 10

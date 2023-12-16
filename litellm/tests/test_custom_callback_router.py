@@ -72,15 +72,15 @@ class CompletionCustomHandler(CustomLogger): # https://docs.litellm.ai/docs/obse
             self.states.append("post_api_call")
             ## START TIME 
             assert isinstance(start_time, datetime)
-            ## END TIME 
-            assert end_time == None
-            ## RESPONSE OBJECT 
-            assert response_obj == None
+            ## END TIME
+            assert end_time is None
+            ## RESPONSE OBJECT
+            assert response_obj is None
             ## KWARGS 
             assert isinstance(kwargs['model'], str)
             assert isinstance(kwargs['messages'], list)
             assert isinstance(kwargs['optional_params'], dict)
-            assert isinstance(kwargs['litellm_params'], dict) 
+            assert isinstance(kwargs['litellm_params'], dict)
             assert isinstance(kwargs['start_time'], (datetime, type(None)))
             assert isinstance(kwargs['stream'], bool)
             assert isinstance(kwargs['user'], (str, type(None)))
@@ -88,7 +88,7 @@ class CompletionCustomHandler(CustomLogger): # https://docs.litellm.ai/docs/obse
             assert isinstance(kwargs['api_key'], (str, type(None)))
             assert isinstance(kwargs['original_response'], (str, litellm.CustomStreamWrapper)) or inspect.iscoroutine(kwargs['original_response']) or inspect.isasyncgen(kwargs['original_response'])
             assert isinstance(kwargs['additional_args'], (dict, type(None)))
-            assert isinstance(kwargs['log_event_type'], str) 
+            assert isinstance(kwargs['log_event_type'], str)
             ### ROUTER-SPECIFIC KWARGS
             assert isinstance(kwargs["litellm_params"]["metadata"], dict)
             assert isinstance(kwargs["litellm_params"]["metadata"]["model_group"], str)
@@ -162,21 +162,26 @@ class CompletionCustomHandler(CustomLogger): # https://docs.litellm.ai/docs/obse
             assert isinstance(start_time, datetime)
             ## END TIME 
             assert isinstance(end_time, datetime)
-            ## RESPONSE OBJECT 
-            assert response_obj == None
+            ## RESPONSE OBJECT
+            assert response_obj is None
             ## KWARGS
             assert isinstance(kwargs['model'], str)
             assert isinstance(kwargs['messages'], list) and isinstance(kwargs['messages'][0], dict)
             assert isinstance(kwargs['optional_params'], dict)
-            assert isinstance(kwargs['litellm_params'], dict) 
+            assert isinstance(kwargs['litellm_params'], dict)
             assert isinstance(kwargs['start_time'], (datetime, type(None)))
             assert isinstance(kwargs['stream'], bool)
             assert isinstance(kwargs['user'], (str, type(None)))
             assert (isinstance(kwargs['input'], list) and isinstance(kwargs['input'][0], dict)) or isinstance(kwargs['input'], (dict, str))
             assert isinstance(kwargs['api_key'], (str, type(None)))
-            assert isinstance(kwargs['original_response'], (str, litellm.CustomStreamWrapper)) or kwargs["original_response"] == None
+            assert (
+                isinstance(
+                    kwargs['original_response'], (str, litellm.CustomStreamWrapper)
+                )
+                or kwargs["original_response"] is None
+            )
             assert isinstance(kwargs['additional_args'], (dict, type(None)))
-            assert isinstance(kwargs['log_event_type'], str) 
+            assert isinstance(kwargs['log_event_type'], str)
         except: 
             print(f"Assertion Error: {traceback.format_exc()}")
             self.errors.append(traceback.format_exc())
@@ -187,7 +192,6 @@ class CompletionCustomHandler(CustomLogger): # https://docs.litellm.ai/docs/obse
             No-op. 
             Not implemented yet. 
             """
-            pass
         except Exception as e: 
             print(f"Assertion Error: {traceback.format_exc()}")
             self.errors.append(traceback.format_exc())
@@ -236,21 +240,28 @@ class CompletionCustomHandler(CustomLogger): # https://docs.litellm.ai/docs/obse
             assert isinstance(start_time, datetime)
             ## END TIME 
             assert isinstance(end_time, datetime)
-            ## RESPONSE OBJECT 
-            assert response_obj == None
+            ## RESPONSE OBJECT
+            assert response_obj is None
             ## KWARGS
             assert isinstance(kwargs['model'], str)
             assert isinstance(kwargs['messages'], list)
             assert isinstance(kwargs['optional_params'], dict)
-            assert isinstance(kwargs['litellm_params'], dict) 
+            assert isinstance(kwargs['litellm_params'], dict)
             assert isinstance(kwargs['start_time'], (datetime, type(None)))
             assert isinstance(kwargs['stream'], bool)
             assert isinstance(kwargs['user'], (str, type(None)))
             assert isinstance(kwargs['input'], (list, str, dict))
             assert isinstance(kwargs['api_key'], (str, type(None)))
-            assert isinstance(kwargs['original_response'], (str, litellm.CustomStreamWrapper)) or inspect.isasyncgen(kwargs['original_response']) or inspect.iscoroutine(kwargs['original_response']) or kwargs['original_response'] == None
+            assert (
+                isinstance(
+                    kwargs['original_response'], (str, litellm.CustomStreamWrapper)
+                )
+                or inspect.isasyncgen(kwargs['original_response'])
+                or inspect.iscoroutine(kwargs['original_response'])
+                or kwargs['original_response'] is None
+            )
             assert isinstance(kwargs['additional_args'], (dict, type(None)))
-            assert isinstance(kwargs['log_event_type'], str) 
+            assert isinstance(kwargs['log_event_type'], str)
         except: 
             print(f"Assertion Error: {traceback.format_exc()}")
             self.errors.append(traceback.format_exc())

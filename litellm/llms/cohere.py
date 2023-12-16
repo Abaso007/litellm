@@ -146,53 +146,52 @@ def completion(
 
     if "stream" in optional_params and optional_params["stream"] == True:
         return response.iter_lines()
-    else:
-        ## LOGGING
-        logging_obj.post_call(
-                input=prompt,
-                api_key=api_key,
-                original_response=response.text,
-                additional_args={"complete_input_dict": data},
-            )
-        print_verbose(f"raw model_response: {response.text}")
-        ## RESPONSE OBJECT
-        completion_response = response.json()
-        if "error" in completion_response:
-            raise CohereError(
-                message=completion_response["error"],
-                status_code=response.status_code,
-            )
-        else:
-            try:
-                choices_list = []
-                for idx, item in enumerate(completion_response["generations"]):
-                    if len(item["text"]) > 0:
-                        message_obj = Message(content=item["text"])
-                    else: 
-                        message_obj = Message(content=None)
-                    choice_obj = Choices(finish_reason=item["finish_reason"], index=idx+1, message=message_obj)
-                    choices_list.append(choice_obj)
-                model_response["choices"] = choices_list
-            except Exception as e:
-                raise CohereError(message=response.text, status_code=response.status_code)
-
-        ## CALCULATING USAGE
-        prompt_tokens = len(
-            encoding.encode(prompt)
-        ) 
-        completion_tokens = len(
-            encoding.encode(model_response["choices"][0]["message"].get("content", ""))
+    ## LOGGING
+    logging_obj.post_call(
+            input=prompt,
+            api_key=api_key,
+            original_response=response.text,
+            additional_args={"complete_input_dict": data},
         )
-
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
-        usage = Usage(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens
+    print_verbose(f"raw model_response: {response.text}")
+    ## RESPONSE OBJECT
+    completion_response = response.json()
+    if "error" in completion_response:
+        raise CohereError(
+            message=completion_response["error"],
+            status_code=response.status_code,
         )
-        model_response.usage = usage
-        return model_response
+    try:
+        choices_list = []
+        for idx, item in enumerate(completion_response["generations"]):
+            message_obj = (
+                Message(content=item["text"])
+                if len(item["text"]) > 0
+                else Message(content=None)
+            )
+            choice_obj = Choices(finish_reason=item["finish_reason"], index=idx+1, message=message_obj)
+            choices_list.append(choice_obj)
+        model_response["choices"] = choices_list
+    except Exception as e:
+        raise CohereError(message=response.text, status_code=response.status_code)
+
+    ## CALCULATING USAGE
+    prompt_tokens = len(
+        encoding.encode(prompt)
+    )
+    completion_tokens = len(
+        encoding.encode(model_response["choices"][0]["message"].get("content", ""))
+    )
+
+    model_response["created"] = int(time.time())
+    model_response["model"] = model
+    usage = Usage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens
+    )
+    model_response.usage = usage
+    return model_response
 
 def embedding(
     model: str,
@@ -247,22 +246,14 @@ def embedding(
     if response.status_code!=200:
         raise CohereError(message=response.text, status_code=response.status_code)
     embeddings = response.json()['embeddings']
-    output_data = []
-    for idx, embedding in enumerate(embeddings):
-        output_data.append(
-            {
-                "object": "embedding",
-                "index": idx,
-                "embedding": embedding
-            }
-        )
+    output_data = [
+        {"object": "embedding", "index": idx, "embedding": embedding}
+        for idx, embedding in enumerate(embeddings)
+    ]
     model_response["object"] = "list"
     model_response["data"] = output_data
     model_response["model"] = model
-    input_tokens = 0
-    for text in input:
-        input_tokens+=len(encoding.encode(text)) 
-
+    input_tokens = sum(len(encoding.encode(text)) for text in input)
     model_response["usage"] = { 
         "prompt_tokens": input_tokens, 
         "total_tokens": input_tokens,

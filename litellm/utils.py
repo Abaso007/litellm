@@ -123,13 +123,12 @@ class UnsupportedParamsError(Exception):
 
 
 def _generate_id(): # private helper function
-    return 'chatcmpl-' + str(uuid.uuid4())
+    return f'chatcmpl-{str(uuid.uuid4())}'
 
 def map_finish_reason(finish_reason: str): # openai supports 5 stop sequences - 'stop', 'length', 'function_call', 'content_filter', 'null'
     # anthropic mapping
     if finish_reason == "stop_sequence":
         return "stop"
-    # cohere mapping - https://docs.cohere.com/reference/generate
     elif finish_reason == "COMPLETE": 
         return "stop"
     elif finish_reason == "MAX_TOKENS": # cohere + vertex ai
@@ -138,10 +137,9 @@ def map_finish_reason(finish_reason: str): # openai supports 5 stop sequences - 
         return "content_filter"
     elif finish_reason == "ERROR": # openai currently doesn't support an 'error' finish reason
         return "stop"
-    # huggingface mapping https://huggingface.github.io/text-generation-inference/#/Text%20Generation%20Inference/generate_stream
-    elif finish_reason == "eos_token" or finish_reason == "stop_sequence":
+    elif finish_reason == "eos_token":
         return "stop"
-    elif finish_reason == "FINISH_REASON_UNSPECIFIED" or finish_reason == "STOP": # vertex ai - got from running `print(dir(response_obj.candidates[0].finish_reason))`: ['FINISH_REASON_UNSPECIFIED', 'MAX_TOKENS', 'OTHER', 'RECITATION', 'SAFETY', 'STOP',] 
+    elif finish_reason in {"FINISH_REASON_UNSPECIFIED", "STOP"}: # vertex ai - got from running `print(dir(response_obj.candidates[0].finish_reason))`: ['FINISH_REASON_UNSPECIFIED', 'MAX_TOKENS', 'OTHER', 'RECITATION', 'SAFETY', 'STOP',] 
         return "stop"
     elif finish_reason == "SAFETY": # vertex ai
         return "content_filter"
@@ -169,10 +167,10 @@ class Message(OpenAIObject):
             self.function_call = FunctionCall(**function_call)
         if tool_calls is not None:
             self.tool_calls = []
-            for tool_call in tool_calls:
-                self.tool_calls.append(
-                    ChatCompletionMessageToolCall(**tool_call)
-                )
+            self.tool_calls.extend(
+                ChatCompletionMessageToolCall(**tool_call)
+                for tool_call in tool_calls
+            )
         if logprobs is not None:
             self._logprobs = logprobs  
 
@@ -224,10 +222,7 @@ class Choices(OpenAIObject):
         super(Choices, self).__init__(**params)
         self.finish_reason = map_finish_reason(finish_reason) # set finish_reason for all responses
         self.index = index
-        if message is None:
-            self.message = Message(content=None)
-        else:
-            self.message = message
+        self.message = Message(content=None) if message is None else message
     
     def __contains__(self, key):
         # Define custom behavior for the 'in' operator
@@ -274,15 +269,9 @@ class Usage(OpenAIObject):
 class StreamingChoices(OpenAIObject):
     def __init__(self, finish_reason=None, index=0, delta: Optional[Delta]=None, **params):
         super(StreamingChoices, self).__init__(**params)
-        if finish_reason:
-            self.finish_reason = finish_reason
-        else:
-            self.finish_reason = None
+        self.finish_reason = finish_reason if finish_reason else None
         self.index = index
-        if delta:
-            self.delta = delta
-        else:
-            self.delta = Delta()
+        self.delta = delta if delta else Delta()
     
     def __contains__(self, key):
         # Define custom behavior for the 'in' operator
@@ -338,19 +327,10 @@ class ModelResponse(OpenAIObject):
             else:
                 object = "chat.completion"
             choices = [Choices()]
-        if id is None:
-            id = _generate_id()
-        else:
-            id = id
-        if created is None:
-            created = int(time.time())
-        else:
-            created = created
+        id = _generate_id() if id is None else id
+        created = int(time.time()) if created is None else created
         model = model
-        if usage:
-            usage = usage
-        else:
-            usage = Usage()
+        usage = usage if usage else Usage()
         if hidden_params:
             self._hidden_params = hidden_params
         super().__init__(id=id, choices=choices, created=created, model=model, object=object, system_fingerprint=system_fingerprint, usage=usage, **params)
@@ -410,20 +390,9 @@ class EmbeddingResponse(OpenAIObject):
 
     def __init__(self, model=None, usage=None, stream=False, response_ms=None, data=None):
         object = "list"
-        if response_ms:
-            _response_ms = response_ms
-        else:
-            _response_ms = None
-        if data: 
-            data = data
-        else: 
-            data = None
-        
-        if usage:
-            usage = usage
-        else:
-            usage = Usage()
-
+        _response_ms = response_ms if response_ms else None
+        data = data if data else None
+        usage = usage if usage else Usage()
         model = model
         super().__init__(model=model, object=object, data=data, usage=usage)
 
@@ -458,14 +427,8 @@ class TextChoices(OpenAIObject):
         else:
             self.finish_reason = "stop"
         self.index = index
-        if text is not None:
-            self.text = text
-        else:
-            self.text = None
-        if logprobs:
-            self.logprobs = []
-        else:
-            self.logprobs = logprobs
+        self.text = text if text is not None else None
+        self.logprobs = [] if logprobs else logprobs
         
     def __contains__(self, key):
         # Define custom behavior for the 'in' operator
@@ -503,29 +466,13 @@ class TextCompletionResponse(OpenAIObject):
     """
     def __init__(self, id=None, choices=None, created=None, model=None, usage=None, stream=False, response_ms=None, **params):
         super(TextCompletionResponse, self).__init__(**params)
-        if stream:
-            self.object = "text_completion.chunk"
-            self.choices = [TextChoices()]
-        else:
-            self.object = "text_completion"
-            self.choices = [TextChoices()]
-        if id is None:
-            self.id = _generate_id()
-        else:
-            self.id = id
-        if created is None:
-            self.created = int(time.time())
-        else:
-            self.created = created
-        if response_ms:
-            self._response_ms = response_ms
-        else:
-            self._response_ms = None
+        self.object = "text_completion.chunk" if stream else "text_completion"
+        self.choices = [TextChoices()]
+        self.id = _generate_id() if id is None else id
+        self.created = int(time.time()) if created is None else created
+        self._response_ms = response_ms if response_ms else None
         self.model = model
-        if usage:
-            self.usage = usage
-        else:
-            self.usage = Usage()
+        self.usage = usage if usage else Usage()
         self._hidden_params = {} # used in case users want to access the original model response
 
     
@@ -631,8 +578,7 @@ class Logging:
 
             print_verbose(f"PRE-API-CALL ADDITIONAL ARGS: {additional_args}")
 
-            curl_command = "\n\nPOST Request Sent from LiteLLM:\n"
-            curl_command += "curl -X POST \\\n"
+            curl_command = "\n\nPOST Request Sent from LiteLLM:\n" + "curl -X POST \\\n"
             curl_command += f"{api_base} \\\n"
             curl_command += f"{formatted_headers} \\\n" if formatted_headers.strip() != "" else ""
             curl_command += f"-d '{str(data)}'\n"
@@ -741,14 +687,14 @@ class Logging:
         for callback in litellm._async_input_callback:
             try: 
                 if isinstance(callback, CustomLogger): # custom logger class 
-                    print_verbose(f"Async input callbacks: CustomLogger")
+                    print_verbose("Async input callbacks: CustomLogger")
                     asyncio.create_task(callback.async_log_input_event(
                             model=self.model,
                             messages=self.messages,
                             kwargs=self.model_call_details,
                         ))
                 if callable(callback): # custom logger functions
-                    print_verbose(f"Async success callbacks: async_log_event")
+                    print_verbose("Async success callbacks: async_log_event")
                     asyncio.create_task(customLogger.async_log_input_event(
                         model=self.model,
                         messages=self.messages,
@@ -785,7 +731,7 @@ class Logging:
                     print_verbose(
                         f"LiteLLM.LoggingError: [Non-Blocking] Exception occurred while logging {traceback.format_exc()}"
                     )
-            
+
             # Input Integration Logging -> If you want to log the fact that an attempt to call the model was made
             for callback in litellm.input_callback:
                 try:
@@ -826,7 +772,6 @@ class Logging:
             print_verbose(
                 f"LiteLLM.LoggingError: [Non-Blocking] Exception occurred while logging {traceback.format_exc()}"
             )
-            pass
     
     def _success_handler_helper_fn(self, result=None, start_time=None, end_time=None, cache_hit=None): 
         try: 

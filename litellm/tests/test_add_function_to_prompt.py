@@ -35,10 +35,9 @@ def test_function_call_non_openai_model():
             }
         ]
         response = litellm.completion(model=model, messages=messages, functions=functions)
-        pytest.fail(f'An error occurred')
+        pytest.fail('An error occurred')
     except Exception as e: 
         print(e)
-        pass
 
 test_function_call_non_openai_model()
 

@@ -110,7 +110,7 @@ def completion(
     headers = validate_environment(api_key)
 
     ## Load Config
-    config = litellm.NLPCloudConfig.get_config() 
+    config = litellm.NLPCloudConfig.get_config()
     for k, v in config.items(): 
         if k not in optional_params: # completion(top_k=3) > togetherai_config(top_k=3) <- allows for dynamic variables to be passed in
             optional_params[k] = v
@@ -139,45 +139,43 @@ def completion(
     )
     if "stream" in optional_params and optional_params["stream"] == True:
         return clean_and_iterate_chunks(response)
-    else:
-        ## LOGGING
-        logging_obj.post_call(
-                input=text,
-                api_key=api_key,
-                original_response=response.text,
-                additional_args={"complete_input_dict": data},
-            )
-        print_verbose(f"raw model_response: {response.text}")
-        ## RESPONSE OBJECT
-        try:
-            completion_response = response.json()
-        except:
-            raise NLPCloudError(message=response.text, status_code=response.status_code)
-        if "error" in completion_response:
-            raise NLPCloudError(
-                message=completion_response["error"],
-                status_code=response.status_code,
-            )
-        else:
-            try:
-                if len(completion_response["generated_text"]) > 0:
-                    model_response["choices"][0]["message"]["content"] = completion_response["generated_text"]
-            except:
-                raise NLPCloudError(message=json.dumps(completion_response), status_code=response.status_code)
-
-        ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
-        prompt_tokens = completion_response["nb_input_tokens"]
-        completion_tokens = completion_response["nb_generated_tokens"]
-
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
-        usage = Usage(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens
+    ## LOGGING
+    logging_obj.post_call(
+            input=text,
+            api_key=api_key,
+            original_response=response.text,
+            additional_args={"complete_input_dict": data},
         )
-        model_response.usage = usage
-        return model_response
+    print_verbose(f"raw model_response: {response.text}")
+    ## RESPONSE OBJECT
+    try:
+        completion_response = response.json()
+    except:
+        raise NLPCloudError(message=response.text, status_code=response.status_code)
+    if "error" in completion_response:
+        raise NLPCloudError(
+            message=completion_response["error"],
+            status_code=response.status_code,
+        )
+    try:
+        if len(completion_response["generated_text"]) > 0:
+            model_response["choices"][0]["message"]["content"] = completion_response["generated_text"]
+    except:
+        raise NLPCloudError(message=json.dumps(completion_response), status_code=response.status_code)
+
+    ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
+    prompt_tokens = completion_response["nb_input_tokens"]
+    completion_tokens = completion_response["nb_generated_tokens"]
+
+    model_response["created"] = int(time.time())
+    model_response["model"] = model
+    usage = Usage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens
+    )
+    model_response.usage = usage
+    return model_response
 
 
 # def clean_and_iterate_chunks(response):

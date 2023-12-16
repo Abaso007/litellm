@@ -29,8 +29,7 @@ def test_batch_completions():
         print(len(result))
         assert(len(result)==3)
     except Timeout as e:
-        print(f"IN TIMEOUT")
-        pass
+        print("IN TIMEOUT")
     except Exception as e:
         pytest.fail(f"An error occurred: {e}")
 test_batch_completions()

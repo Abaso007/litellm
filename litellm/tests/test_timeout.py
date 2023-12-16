@@ -30,7 +30,6 @@ def test_timeout():
     except openai.APITimeoutError as e:
         print("Passed: Raised correct exception. Got openai.APITimeoutError\nGood Job", e)
         print(type(e))
-        pass
     except Exception as e:
         pytest.fail(f"Did not raise error `openai.APITimeoutError`. Instead raised error type: {type(e)}, Error: {e}")
 # test_timeout()
@@ -57,7 +56,6 @@ def test_timeout_streaming():
     except openai.APITimeoutError as e:
         print("Passed: Raised correct exception. Got openai.APITimeoutError\nGood Job", e)
         print(type(e))
-        pass
     except Exception as e:
         pytest.fail(f"Did not raise error `openai.APITimeoutError`. Instead raised error type: {type(e)}, Error: {e}")
 test_timeout_streaming()

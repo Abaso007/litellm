@@ -111,7 +111,7 @@ def test_timeouts_router():
             },
         ]
         router = Router(model_list=model_list)
-        
+
         print("PASSED !")
         async def test():
             try:
@@ -130,7 +130,6 @@ def test_timeouts_router():
     except openai.APITimeoutError as e:
         print("Passed: Raised correct exception. Got openai.APITimeoutError\nGood Job", e)
         print(type(e))
-        pass
     except Exception as e:
         pytest.fail(f"Did not raise error `openai.APITimeoutError`. Instead raised error type: {type(e)}, Error: {e}")
 
@@ -142,7 +141,7 @@ def test_stream_timeouts_router():
     Test the stream timeouts router. See if it selected the correct client with stream timeout
     """
     import openai
-    
+
     litellm.set_verbose = True
     try:
         print("testing init 4 clients with diff timeouts")
@@ -160,7 +159,7 @@ def test_stream_timeouts_router():
             },
         ]
         router = Router(model_list=model_list)
-        
+
         print("PASSED !")
         selected_client = router._get_client(
             deployment=router.model_list[0],
@@ -181,7 +180,6 @@ def test_stream_timeouts_router():
     except openai.APITimeoutError as e:
         print("Passed: Raised correct exception. Got openai.APITimeoutError\nGood Job", e)
         print(type(e))
-        pass
     except Exception as e:
         pytest.fail(f"Did not raise error `openai.APITimeoutError`. Instead raised error type: {type(e)}, Error: {e}")
 

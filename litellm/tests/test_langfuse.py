@@ -41,20 +41,22 @@ def search_logs(log_file_path):
                     print("Found log with /api/public:")
                     print(line.strip())
                     print("\n\n")
-                    match = re.search(r'receive_response_headers.complete return_value=\(b\'HTTP/1.1\', (\d+),', line)
-                    if match:
+                    if match := re.search(
+                        r'receive_response_headers.complete return_value=\(b\'HTTP/1.1\', (\d+),',
+                        line,
+                    ):
                         status_code = int(match.group(1))
-                        if status_code != 200 and status_code != 201:
-                            print("got a BAD log")
-                            bad_logs.append(line.strip())
-                        else:
+                        if status_code in {200, 201}:
 
                             good_logs.append(line.strip())
+                        else:
+                            print("got a BAD log")
+                            bad_logs.append(line.strip())
         print("\nBad Logs")
         print(bad_logs)
-        if len(bad_logs)>0:
+        if bad_logs:
             raise Exception(f"bad logs, Bad logs = {bad_logs}")
-        
+
         print("\nGood Logs")
         print(good_logs)
         if len(good_logs) <= 0:
@@ -144,9 +146,6 @@ def test_langfuse_logging_stream():
                               stream=True
                               )
         print(response)
-        for chunk in response:
-            pass
-            # print(chunk)
     except litellm.Timeout as e: 
         pass
     except Exception as e:

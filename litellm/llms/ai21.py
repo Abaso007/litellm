@@ -84,12 +84,11 @@ def validate_environment(api_key):
         raise ValueError(
             "Missing AI21 API Key - A call is being made to ai21 but no key is set either in the environment variables or via params"
         )
-    headers = {
+    return {
         "accept": "application/json",
         "content-type": "application/json",
-        "Authorization": "Bearer " + api_key,
+        "Authorization": f"Bearer {api_key}",
     }
-    return headers
 
 def completion(
     model: str,
@@ -108,20 +107,11 @@ def completion(
     model = model
     prompt = ""
     for message in messages:
-        if "role" in message:
-            if message["role"] == "user":
-                prompt += (
-                    f"{message['content']}"
-                )
-            else:
-                prompt += (
-                    f"{message['content']}"
-                )
-        else:
-            prompt += f"{message['content']}"
-    
+        prompt += (
+            f"{message['content']}"
+        )
     ## Load Config
-    config = litellm.AI21Config.get_config() 
+    config = litellm.AI21Config.get_config()
     for k, v in config.items(): 
         if k not in optional_params: # completion(top_k=3) > ai21_config(top_k=3) <- allows for dynamic variables to be passed in
             optional_params[k] = v
@@ -149,45 +139,45 @@ def completion(
         )
     if "stream" in optional_params and optional_params["stream"] == True:
         return response.iter_lines()
-    else:
-        ## LOGGING
-        logging_obj.post_call(
-                input=prompt,
-                api_key=api_key,
-                original_response=response.text,
-                additional_args={"complete_input_dict": data},
-            )
-        ## RESPONSE OBJECT
-        completion_response = response.json()
-        try:
-            choices_list = []
-            for idx, item in enumerate(completion_response["completions"]):
-                if len(item["data"]["text"]) > 0:
-                    message_obj = Message(content=item["data"]["text"])
-                else: 
-                    message_obj = Message(content=None)
-                choice_obj = Choices(finish_reason=item["finishReason"]["reason"], index=idx+1, message=message_obj)
-                choices_list.append(choice_obj)
-            model_response["choices"] = choices_list
-        except Exception as e:
-            raise AI21Error(message=traceback.format_exc(), status_code=response.status_code)
-
-        ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
-        prompt_tokens = len(
-            encoding.encode(prompt)
-        ) 
-        completion_tokens = len(
-            encoding.encode(model_response["choices"][0]["message"].get("content"))
+    ## LOGGING
+    logging_obj.post_call(
+            input=prompt,
+            api_key=api_key,
+            original_response=response.text,
+            additional_args={"complete_input_dict": data},
         )
+    ## RESPONSE OBJECT
+    completion_response = response.json()
+    try:
+        choices_list = []
+        for idx, item in enumerate(completion_response["completions"]):
+            message_obj = (
+                Message(content=item["data"]["text"])
+                if len(item["data"]["text"]) > 0
+                else Message(content=None)
+            )
+            choice_obj = Choices(finish_reason=item["finishReason"]["reason"], index=idx+1, message=message_obj)
+            choices_list.append(choice_obj)
+        model_response["choices"] = choices_list
+    except Exception as e:
+        raise AI21Error(message=traceback.format_exc(), status_code=response.status_code)
 
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
-        model_response["usage"] = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        }
-        return model_response
+    ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
+    prompt_tokens = len(
+        encoding.encode(prompt)
+    )
+    completion_tokens = len(
+        encoding.encode(model_response["choices"][0]["message"].get("content"))
+    )
+
+    model_response["created"] = int(time.time())
+    model_response["model"] = model
+    model_response["usage"] = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
+    return model_response
 
 def embedding():
     # logic for parsing in - calling - parsing out model embedding calls

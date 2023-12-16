@@ -24,7 +24,6 @@ async def litellm_completion():
         # If there's an exception, log the error message
         with open("error_log.txt", "a") as error_log:
             error_log.write(f"Error during completion: {str(e)}\n")
-        pass
     
 
 

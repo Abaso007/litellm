@@ -45,7 +45,7 @@ class LangsmithLogger:
             new_kwargs = {}
             for key in kwargs:
                 value = kwargs[key]
-                if key == "start_time" or key =="end_time":
+                if key in ["start_time", "end_time"]:
                     pass
                 elif type(value) != dict:
                     new_kwargs[key] = value
@@ -73,4 +73,3 @@ class LangsmithLogger:
         except:
             # traceback.print_exc()
             print_verbose(f"Langsmith Layer Error - {traceback.format_exc()}")
-            pass

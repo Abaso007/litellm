@@ -27,7 +27,7 @@ def load_vertex_ai_credentials():
     # Define the path to the vertex_key.json file
     print("loading vertex ai credentials")
     filepath = os.path.dirname(os.path.abspath(__file__))
-    vertex_key_path = filepath + '/vertex_key.json'
+    vertex_key_path = f'{filepath}/vertex_key.json'
 
     # Read the existing content of the file or create an empty dictionary
     try:
@@ -58,7 +58,7 @@ def load_vertex_ai_credentials():
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
         # Write the updated content to the temporary file
         json.dump(service_account_key_data, temp_file, indent=2)
-    
+
 
     # Export the temporary file as GOOGLE_APPLICATION_CREDENTIALS
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.path.abspath(temp_file.name)
@@ -68,7 +68,7 @@ async def get_response():
     load_vertex_ai_credentials()
     prompt = '\ndef count_nums(arr):\n    """\n    Write a function count_nums which takes an array of integers and returns\n    the number of elements which has a sum of digits > 0.\n    If a number is negative, then its first signed digit will be negative:\n    e.g. -123 has signed digits -1, 2, and 3.\n    >>> count_nums([]) == 0\n    >>> count_nums([-1, 11, -11]) == 1\n    >>> count_nums([1, 1, 2]) == 3\n    """\n'
     try:
-        response = await acompletion(
+        return await acompletion(
             model="gemini-pro",
             messages=[
                 {
@@ -78,7 +78,6 @@ async def get_response():
                 {"role": "user", "content": prompt},
             ],
         )
-        return response
     except litellm.UnprocessableEntityError as e:
         pass
     except Exception as e:

@@ -9,7 +9,7 @@ def default_pt(messages):
 
 # alpaca prompt template - for models like mythomax, etc. 
 def alpaca_pt(messages): 
-    prompt = custom_prompt(
+    return custom_prompt(
         role_dict={
             "system": {
                 "pre_message": "### Instruction:\n",
@@ -21,36 +21,34 @@ def alpaca_pt(messages):
             },
             "assistant": {
                 "pre_message": "### Response:\n",
-                "post_message": "\n\n"
-            }
+                "post_message": "\n\n",
+            },
         },
         bos_token="<s>",
         eos_token="</s>",
-        messages=messages
+        messages=messages,
     )
-    return prompt
 
 # Llama2 prompt template
 def llama_2_chat_pt(messages):
-    prompt = custom_prompt(
+    return custom_prompt(
         role_dict={
             "system": {
                 "pre_message": "[INST] <<SYS>>\n",
-                "post_message": "\n<</SYS>>\n [/INST]\n"
+                "post_message": "\n<</SYS>>\n [/INST]\n",
             },
-            "user": { # follow this format https://github.com/facebookresearch/llama/blob/77062717054710e352a99add63d160274ce670c6/llama/generation.py#L348
+            "user": {  # follow this format https://github.com/facebookresearch/llama/blob/77062717054710e352a99add63d160274ce670c6/llama/generation.py#L348
                 "pre_message": "[INST] ",
-                "post_message": " [/INST]\n"
-            }, 
+                "post_message": " [/INST]\n",
+            },
             "assistant": {
-                "post_message": "\n" # follows this - https://replicate.com/blog/how-to-prompt-llama
-            }
+                "post_message": "\n"  # follows this - https://replicate.com/blog/how-to-prompt-llama
+            },
         },
         messages=messages,
         bos_token="<s>",
-        eos_token="</s>"
+        eos_token="</s>",
     )
-    return prompt
 
 def ollama_pt(model, messages): # https://github.com/jmorganca/ollama/blob/af4cf55884ac54b9e637cd71dadfe9b7a5685877/docs/modelfile.md#template
     
@@ -97,26 +95,16 @@ def ollama_pt(model, messages): # https://github.com/jmorganca/ollama/blob/af4cf
     return prompt
 
 def mistral_instruct_pt(messages): 
-    prompt = custom_prompt(
+    return custom_prompt(
         initial_prompt_value="<s>",
         role_dict={
-            "system": {
-                "pre_message": "[INST]",
-                "post_message": "[/INST]"
-            }, 
-            "user": {
-                "pre_message": "[INST]", 
-                "post_message": "[/INST]"
-            },
-            "assistant": {
-                "pre_message": "[INST]",
-                "post_message": "[/INST]"
-            }
+            "system": {"pre_message": "[INST]", "post_message": "[/INST]"},
+            "user": {"pre_message": "[INST]", "post_message": "[/INST]"},
+            "assistant": {"pre_message": "[INST]", "post_message": "[/INST]"},
         },
         final_prompt_value="</s>",
-        messages=messages
+        messages=messages,
     )
-    return prompt
 
 # Falcon prompt template - from https://github.com/lm-sys/FastChat/blob/main/fastchat/conversation.py#L110
 def falcon_instruct_pt(messages):
@@ -300,34 +288,39 @@ def get_model_info(token, model):
             for m in model_info: 
                 if m["name"].lower().strip() == model.strip(): 
                     return m['config'].get('prompt_format', None), m['config'].get('chat_template', None)
-            return None, None
-        else:
-            return None, None
+        return None, None
     except Exception as e: # safely fail a prompt template request
         return None, None
 
 def format_prompt_togetherai(messages, prompt_format, chat_template):
     if prompt_format is None:
         return default_pt(messages)
-    
+
     human_prompt, assistant_prompt = prompt_format.split('{prompt}')
 
     if chat_template is not None:
-        prompt = hf_chat_template(model=None, messages=messages, chat_template=chat_template)
+        return hf_chat_template(
+            model=None, messages=messages, chat_template=chat_template
+        )
     elif prompt_format is not None: 
-        prompt = custom_prompt(role_dict={}, messages=messages, initial_prompt_value=human_prompt, final_prompt_value=assistant_prompt)
+        return custom_prompt(
+            role_dict={},
+            messages=messages,
+            initial_prompt_value=human_prompt,
+            final_prompt_value=assistant_prompt,
+        )
     else: 
-        prompt = default_pt(messages)
-    return prompt 
+        return default_pt(messages) 
 
 ###
 
 def anthropic_pt(messages: list): # format - https://docs.anthropic.com/claude/reference/complete_post
+
     class AnthropicConstants(Enum):
         HUMAN_PROMPT = "\n\nHuman: "
         AI_PROMPT = "\n\nAssistant: "
-    
-    prompt = "" 
+
+    prompt = ""
     for idx, message in enumerate(messages): # needs to start with `\n\nHuman: ` and end with `\n\nAssistant: `
         if message["role"] == "user":
             prompt += (
@@ -342,7 +335,7 @@ def anthropic_pt(messages: list): # format - https://docs.anthropic.com/claude/r
                 f"{AnthropicConstants.AI_PROMPT.value}{message['content']}"
             )
         if idx == 0 and message["role"] == "assistant": # ensure the prompt always starts with `\n\nHuman: `
-            prompt = f"{AnthropicConstants.HUMAN_PROMPT.value}" + prompt
+            prompt = f"{AnthropicConstants.HUMAN_PROMPT.value}{prompt}"
     prompt += f"{AnthropicConstants.AI_PROMPT.value}"
     return prompt 
 
@@ -421,8 +414,12 @@ def prompt_factory(model: str, messages: list, custom_llm_provider: Optional[str
             return phind_codellama_pt(messages=messages)
         elif "togethercomputer/llama-2" in model and ("instruct" in model or "chat" in model):
             return llama_2_chat_pt(messages=messages)
-        elif model in ["gryphe/mythomax-l2-13b", "gryphe/mythomix-l2-13b", "gryphe/mythologic-l2-13b"]:
-            return alpaca_pt(messages=messages) 
+        elif model in {
+            "gryphe/mythomax-l2-13b",
+            "gryphe/mythomix-l2-13b",
+            "gryphe/mythologic-l2-13b",
+        }:
+            return alpaca_pt(messages=messages)
         else: 
             return hf_chat_template(original_model_name, messages)
     except:

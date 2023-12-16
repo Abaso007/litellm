@@ -115,7 +115,7 @@ def test_get_response_streaming():
             i = 0
             async for chunk in response:
                 token = chunk["choices"][0]["delta"].get("content", "")
-                if token == None:
+                if token is None:
                     continue # openai v1.0.0 returns content=None
                 output += token
             assert output is not None, "output cannot be None."
@@ -126,6 +126,7 @@ def test_get_response_streaming():
             pass
         except Exception as e:
             pytest.fail(f"An exception occurred: {e}")
+
     asyncio.run(test_async_call())
 
 # test_get_response_streaming()
@@ -150,7 +151,7 @@ def test_get_response_non_openai_streaming():
             i = 0
             async for chunk in response:
                 token = chunk["choices"][0]["delta"].get("content", None)
-                if token == None:
+                if token is None:
                     continue
                 print(token)
                 output += token
@@ -163,6 +164,7 @@ def test_get_response_non_openai_streaming():
         except Exception as e:
             pytest.fail(f"An exception occurred: {e}")
         return response
+
     asyncio.run(test_async_call())
 
 # test_get_response_non_openai_streaming()

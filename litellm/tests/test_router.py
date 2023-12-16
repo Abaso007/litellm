@@ -62,7 +62,7 @@ def test_exception_raising():
 			]
 		)
 		os.environ["AZURE_API_KEY"] = old_api_key
-		pytest.fail(f"Should have raised an Auth Error")
+		pytest.fail("Should have raised an Auth Error")
 	except openai.AuthenticationError:
 		print("Test Passed: Caught an OPENAI AUTH Error, Good job. This is what we needed!")
 		os.environ["AZURE_API_KEY"] = old_api_key
@@ -141,7 +141,7 @@ def test_reading_key_from_model_list():
 		router.reset()
 	except Exception as e:
 		os.environ["AZURE_API_KEY"] = old_api_key
-		print(f"FAILED TEST")
+		print("FAILED TEST")
 		pytest.fail(f"Got unexpected exception on router! - {e}")
 # test_reading_key_from_model_list()
 
@@ -217,7 +217,7 @@ def test_call_one_endpoint():
 			)
 
 			print("\n response", response)
-		
+
 		async def call_azure_embedding():
 			response = await router.aembedding(
 				model="azure/azure-embedding-model",
@@ -229,11 +229,11 @@ def test_call_one_endpoint():
 		asyncio.run(call_azure_completion())
 		asyncio.run(call_bedrock_claude())
 		asyncio.run(call_azure_embedding())
-		
+
 		os.environ["AZURE_API_BASE"] = old_api_base
 		os.environ["AZURE_API_KEY"] = old_api_key
 	except Exception as e:
-		print(f"FAILED TEST")
+		print("FAILED TEST")
 		pytest.fail(f"Got unexpected exception on router! - {e}")
 
 # test_call_one_endpoint()
@@ -252,7 +252,7 @@ def test_router_azure_acompletion():
 		# remove api key from env to repro how proxy passes key to router 
 		old_api_key = os.environ["AZURE_API_KEY"]
 		os.environ.pop("AZURE_API_KEY", None)
-	
+
 		model_list = [
 			{ 
 				"model_name": "gpt-3.5-turbo", # openai model name 
@@ -280,7 +280,7 @@ def test_router_azure_acompletion():
 					routing_strategy="simple-shuffle",
 					set_verbose=True
 				) # type: ignore
-		
+
 		async def test1():
 
 			response = await router.acompletion(
@@ -323,7 +323,7 @@ def test_router_azure_acompletion():
 		router.reset()
 	except Exception as e:
 		os.environ["AZURE_API_KEY"] = old_api_key
-		print(f"FAILED TEST")
+		print("FAILED TEST")
 		pytest.fail(f"Got unexpected exception on router! - {e}")
 # test_router_azure_acompletion()
 
