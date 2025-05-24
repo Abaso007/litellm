@@ -149,14 +149,14 @@ class CustomStreamWrapper:
         )
 
     def check_is_function_call(self, logging_obj) -> bool:
+        from litellm.litellm_core_utils.prompt_templates.common_utils import (
+            is_function_call,
+        )
+
         if hasattr(logging_obj, "optional_params") and isinstance(
             logging_obj.optional_params, dict
         ):
-            if (
-                "litellm_param_is_function_call" in logging_obj.optional_params
-                and logging_obj.optional_params["litellm_param_is_function_call"]
-                is True
-            ):
+            if is_function_call(logging_obj.optional_params):
                 return True
 
         return False
@@ -697,10 +697,11 @@ class CustomStreamWrapper:
 
         If a valid ID is received in any chunk, use it for the response.
         """
+        if self.response_id is None and id and isinstance(id, str) and id.strip():
+            self.response_id = id
+
         if id and isinstance(id, str) and id.strip():
-            self.response_id = id
-        elif self.response_id is None:
-            self.response_id = id
+            model_response._hidden_params["received_model_id"] = id
 
         if self.response_id is not None and isinstance(self.response_id, str):
             model_response.id = self.response_id
