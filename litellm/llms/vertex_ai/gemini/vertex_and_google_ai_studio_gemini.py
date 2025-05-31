@@ -219,6 +219,8 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
             "logprobs",
             "top_logprobs",
             "modalities",
+            "parallel_tool_calls",
+            "web_search_options",
         ]
         if supports_reasoning(model):
             supported_params.append("reasoning_effort")
@@ -250,6 +252,14 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                 status_code=400,
             )
 
+    def _map_web_search_options(self, value: dict) -> Tools:
+        """
+        Base Case: empty dict
+
+        Google doesn't support user_location or search_context_size params
+        """
+        return Tools(googleSearch={})
+
     def _map_function(self, value: List[dict]) -> List[Tools]:
         gtool_func_declarations = []
         googleSearch: Optional[dict] = None
@@ -260,6 +270,30 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         value = _remove_additional_properties(value)
         # remove 'strict' from tools
         value = _remove_strict_from_schema(value)
+
+        def get_tool_value(tool: dict, tool_name: str) -> Optional[dict]:
+            """
+            Helper function to get tool value handling both camelCase and underscore_case variants
+
+            Args:
+                tool (dict): The tool dictionary
+                tool_name (str): The base tool name (e.g. "codeExecution")
+
+            Returns:
+                Optional[dict]: The tool value if found, None otherwise
+            """
+            # Convert camelCase to underscore_case
+            underscore_name = "".join(
+                ["_" + c.lower() if c.isupper() else c for c in tool_name]
+            ).lstrip("_")
+            # Try both camelCase and underscore_case variants
+
+            if tool.get(tool_name) is not None:
+                return tool.get(tool_name)
+            elif tool.get(underscore_name) is not None:
+                return tool.get(underscore_name)
+            else:
+                return None
 
         for tool in value:
             openai_function_object: Optional[
@@ -283,15 +317,17 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
             elif "name" in tool:  # functions list
                 openai_function_object = ChatCompletionToolParamFunctionChunk(**tool)  # type: ignore
 
-            # check if grounding
-            if tool.get("googleSearch", None) is not None:
-                googleSearch = tool["googleSearch"]
-            elif tool.get("googleSearchRetrieval", None) is not None:
-                googleSearchRetrieval = tool["googleSearchRetrieval"]
-            elif tool.get("enterpriseWebSearch", None) is not None:
-                enterpriseWebSearch = tool["enterpriseWebSearch"]
-            elif tool.get("code_execution", None) is not None:
-                code_execution = tool["code_execution"]
+            tool_name = list(tool.keys())[0] if len(tool.keys()) == 1 else None
+            if tool_name and (
+                tool_name == "codeExecution" or tool_name == "code_execution"
+            ):  # code_execution maintained for backwards compatibility
+                code_execution = get_tool_value(tool, "codeExecution")
+            elif tool_name and tool_name == "googleSearch":
+                googleSearch = get_tool_value(tool, "googleSearch")
+            elif tool_name and tool_name == "googleSearchRetrieval":
+                googleSearchRetrieval = get_tool_value(tool, "googleSearchRetrieval")
+            elif tool_name and tool_name == "enterpriseWebSearch":
+                enterpriseWebSearch = get_tool_value(tool, "enterpriseWebSearch")
             elif openai_function_object is not None:
                 gtool_func_declaration = FunctionDeclaration(
                     name=openai_function_object["name"],
@@ -385,6 +421,10 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
             raise ValueError(f"Invalid reasoning effort: {reasoning_effort}")
 
     @staticmethod
+    def _is_thinking_budget_zero(thinking_budget: Optional[int]) -> bool:
+        return thinking_budget is not None and thinking_budget == 0
+
+    @staticmethod
     def _map_thinking_param(
         thinking_param: AnthropicThinkingParam,
     ) -> GeminiThinkingConfig:
@@ -392,7 +432,9 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         thinking_budget = thinking_param.get("budget_tokens")
 
         params: GeminiThinkingConfig = {}
-        if thinking_enabled:
+        if thinking_enabled and not VertexGeminiConfig._is_thinking_budget_zero(
+            thinking_budget
+        ):
             params["includeThoughts"] = True
         if thinking_budget is not None and isinstance(thinking_budget, int):
             params["thinkingBudget"] = thinking_budget
@@ -411,6 +453,19 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
             else:
                 response_modalities.append("MODALITY_UNSPECIFIED")
         return response_modalities
+
+    def validate_parallel_tool_calls(self, value: bool, non_default_params: dict):
+        tools = non_default_params.get("tools", non_default_params.get("functions"))
+        num_function_declarations = len(tools) if isinstance(tools, list) else 0
+        if num_function_declarations > 1:
+            raise litellm.utils.UnsupportedParamsError(
+                message=(
+                    "`parallel_tool_calls=False` is not supported by Gemini when multiple tools are "
+                    "provided. Specify a single tool, or set "
+                    "`parallel_tool_calls=True`. If you want to drop this param, set `litellm.drop_params = True` or pass in `(.., drop_params=True)` in the requst - https://docs.litellm.ai/docs/completion/drop_params"
+                ),
+                status_code=400,
+            )
 
     def map_openai_params(
         self,
@@ -454,9 +509,8 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                 and isinstance(value, list)
                 and value
             ):
-                optional_params["tools"] = self._map_function(value=value)
-                optional_params["litellm_param_is_function_call"] = (
-                    True if param == "functions" else False
+                optional_params = self._add_tools_to_optional_params(
+                    optional_params, self._map_function(value=value)
                 )
             elif param == "tool_choice" and (
                 isinstance(value, str) or isinstance(value, dict)
@@ -466,6 +520,13 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                 )
                 if _tool_choice_value is not None:
                     optional_params["tool_choice"] = _tool_choice_value
+            elif param == "parallel_tool_calls":
+                if value is False and not (
+                    drop_params or litellm.drop_params
+                ):  # if drop params is True, then we should just ignore this
+                    self.validate_parallel_tool_calls(value, non_default_params)
+                else:
+                    optional_params["parallel_tool_calls"] = value
             elif param == "seed":
                 optional_params["seed"] = value
             elif param == "reasoning_effort" and isinstance(value, str):
@@ -481,7 +542,11 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
             elif param == "modalities" and isinstance(value, list):
                 response_modalities = self.map_response_modalities(value)
                 optional_params["responseModalities"] = response_modalities
-
+            elif param == "web_search_options" and value and isinstance(value, dict):
+                _tools = self._map_web_search_options(value)
+                optional_params = self._add_tools_to_optional_params(
+                    optional_params, [_tools]
+                )
         if litellm.vertex_ai_safety_settings is not None:
             optional_params["safety_settings"] = litellm.vertex_ai_safety_settings
         return optional_params
@@ -880,8 +945,14 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         else:
             return "stop"
 
-    def _process_candidates(self, _candidates, model_response, litellm_params):
+    def _process_candidates(
+        self, _candidates, model_response, standard_optional_params: dict
+    ):
         """Helper method to process candidates and extract metadata"""
+        from litellm.litellm_core_utils.prompt_templates.common_utils import (
+            is_function_call,
+        )
+
         grounding_metadata: List[dict] = []
         safety_ratings: List = []
         citation_metadata: List = []
@@ -918,9 +989,7 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                 functions, tools = self._transform_parts(
                     parts=candidate["content"]["parts"],
                     index=candidate.get("index", idx),
-                    is_function_call=litellm_params.get(
-                        "litellm_param_is_function_call"
-                    ),
+                    is_function_call=is_function_call(standard_optional_params),
                 )
 
             if "logprobsResult" in candidate:
@@ -1019,7 +1088,7 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                     safety_ratings,
                     citation_metadata,
                 ) = self._process_candidates(
-                    _candidates, model_response, litellm_params
+                    _candidates, model_response, logging_obj.optional_params
                 )
 
             usage = self._calculate_usage(completion_response=completion_response)

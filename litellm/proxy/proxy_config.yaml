@@ -1,26 +1,18 @@
 model_list:
-  - model_name: openai/gpt-4o
+  - model_name: anthropic/*
     litellm_params:
-      model: openai/gpt-4o
-      api_key: any_key
-      api_base: https://exampleopenaiendpoint-production.up.railway.app/
-
+      model: anthropic/*
+  
+guardrails:
+  - guardrail_name: "bedrock-pre-guard"
+    litellm_params:
+      guardrail: bedrock  # supported values: "aporia", "bedrock", "lakera"
+      mode: "post_call"
+      guardrailIdentifier: wf0hkdb5x07f # your guardrail ID on bedrock
+      guardrailVersion: "DRAFT"         # your guardrail version on bedrock
+      default_on: true
+  
 
 general_settings:
   store_prompts_in_spend_logs: true
 
-
-
-guardrails:
-  - guardrail_name: "custom-pre-guard"
-    litellm_params:
-      guardrail: custom_guardrail.myCustomGuardrail  # 👈 Key change
-      mode: "pre_call"                  # runs async_pre_call_hook
-  - guardrail_name: "custom-during-guard"
-    litellm_params:
-      guardrail: custom_guardrail.myCustomGuardrail  
-      mode: "during_call"               # runs async_moderation_hook
-  - guardrail_name: "custom-post-guard"
-    litellm_params:
-      guardrail: custom_guardrail.myCustomGuardrail
-      mode: "post_call"                 # runs async_post_call_success_hook
