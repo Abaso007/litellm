@@ -23,7 +23,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 import litellm
 from litellm._logging import verbose_proxy_logger
 from litellm.proxy._types import *
-from litellm.proxy.auth.auth_checks import UserObjectCache
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 from litellm.proxy.hooks.user_management_event_hooks import UserManagementEventHooks
 from litellm.proxy.management_endpoints.common_daily_activity import get_daily_activity
@@ -47,6 +46,9 @@ from litellm.types.proxy.management_endpoints.internal_user_endpoints import (
     UserListResponse,
 )
 
+if TYPE_CHECKING:
+    from litellm.proxy.proxy_server import PrismaClient
+
 router = APIRouter()
 
 
@@ -59,28 +61,34 @@ def _update_internal_new_user_params(data_json: dict, data: NewUserRequest) -> d
             "table_name"
         ] = "user"  # only create a user, don't create key if 'auto_create_key' set to False
 
-    is_internal_user = False
-    if data.user_role and data.user_role.is_internal_user_role:
-        is_internal_user = True
-        if litellm.default_internal_user_params:
-            for key, value in litellm.default_internal_user_params.items():
-                if key == "available_teams":
-                    continue
-                elif key not in data_json or data_json[key] is None:
-                    data_json[key] = value
-                elif (
-                    key == "models"
-                    and isinstance(data_json[key], list)
-                    and len(data_json[key]) == 0
-                ):
-                    data_json[key] = value
+    if litellm.default_internal_user_params:
+        for key, value in litellm.default_internal_user_params.items():
+            if key == "available_teams":
+                continue
+            elif key not in data_json or data_json[key] is None:
+                data_json[key] = value
+            elif (
+                key == "models"
+                and isinstance(data_json[key], list)
+                and len(data_json[key]) == 0
+            ):
+                data_json[key] = value
 
-    if "max_budget" in data_json and data_json["max_budget"] is None:
-        if is_internal_user and litellm.max_internal_user_budget is not None:
+    ## INTERNAL USER ROLE ONLY DEFAULT PARAMS ##
+    if (
+        data.user_role is not None
+        and data.user_role == LitellmUserRoles.INTERNAL_USER.value
+    ):
+        if (
+            litellm.max_internal_user_budget is not None
+            and data_json.get("max_budget") is None
+        ):
             data_json["max_budget"] = litellm.max_internal_user_budget
 
-    if "budget_duration" in data_json and data_json["budget_duration"] is None:
-        if is_internal_user and litellm.internal_user_budget_duration is not None:
+        if (
+            litellm.internal_user_budget_duration is not None
+            and data_json.get("budget_duration") is None
+        ):
             data_json["budget_duration"] = litellm.internal_user_budget_duration
 
     return data_json
@@ -105,7 +113,7 @@ async def _check_duplicate_user_email(
             raise Exception("Database not connected")
 
         existing_user = await prisma_client.db.litellm_usertable.find_first(
-            where={"user_email": user_email}
+            where={"user_email": user_email.strip()}
         )
 
         if existing_user is not None:
@@ -113,6 +121,41 @@ async def _check_duplicate_user_email(
                 status_code=400,
                 detail={"error": f"User with email {user_email} already exists"},
             )
+
+
+async def _add_user_to_organizations(
+    user_id: str,
+    organizations: List[str],
+    prisma_client: "PrismaClient",
+    user_api_key_dict: UserAPIKeyAuth,
+):
+    """
+    Add a user to organizations
+    """
+    from litellm.proxy.management_endpoints.organization_endpoints import (
+        organization_member_add,
+    )
+
+    tasks = []
+    for organization_id in organizations:
+        tasks.append(
+            organization_member_add(
+                data=OrganizationMemberAddRequest(
+                    organization_id=organization_id,
+                    member=[
+                        OrgMember(
+                            user_id=user_id,
+                            role=LitellmUserRoles.INTERNAL_USER,
+                        )
+                    ],
+                ),
+                http_request=Request(
+                    scope={"type": "http", "path": "/user/new"},
+                ),
+                user_api_key_dict=user_api_key_dict,
+            )
+        )
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @router.post(
@@ -163,7 +206,8 @@ async def new_user(
     - duration: Optional[str] - Duration for the key auto-created on `/user/new`. Default is None.
     - key_alias: Optional[str] - Alias for the key auto-created on `/user/new`. Default is None.
     - sso_user_id: Optional[str] - The id of the user in the SSO provider.
-
+    - object_permission: Optional[LiteLLM_ObjectPermissionBase] - internal user-specific object permission. Example - {"vector_stores": ["vector_store_1", "vector_store_2"]}. IF null or {} then no object permission.
+    - organizations: List[str] - List of organization id's the user is a member of
     Returns:
     - key: (str) The generated api key for the user
     - expires: (datetime) Datetime object for when key expires.
@@ -183,13 +227,35 @@ async def new_user(
     ```
     """
     try:
-        from litellm.proxy.proxy_server import prisma_client
+        from litellm.proxy.proxy_server import _license_check, prisma_client
 
+        if prisma_client is None:
+            raise HTTPException(
+                status_code=400, detail=CommonProxyErrors.db_not_connected_error.value
+            )
+
+        if prisma_client is None:
+            raise HTTPException(
+                status_code=500,
+                detail=CommonProxyErrors.db_not_connected_error.value,
+            )
         # Check for duplicate email
         await _check_duplicate_user_email(data.user_email, prisma_client)
 
+        # Check if license is over limit
+        total_users = await prisma_client.db.litellm_usertable.count()
+        if total_users and _license_check.is_over_limit(total_users=total_users):
+            raise HTTPException(
+                status_code=403,
+                detail="License is over limit. Please contact support@berri.ai to upgrade your license.",
+            )
+
         data_json = data.json()  # type: ignore
         data_json = _update_internal_new_user_params(data_json, data)
+        organization_ids = cast(
+            Optional[List[str]], data_json.pop("organizations", None)
+        )
+
         response = await generate_key_helper_fn(request_type="user", **data_json)
         # Admin UI Logic
         # Add User to Team and Organization
@@ -208,9 +274,6 @@ async def new_user(
                             role="user",
                             user_email=data_json.get("user_email", None),
                         ),
-                    ),
-                    http_request=Request(
-                        scope={"type": "http", "path": "/user/new"},
                     ),
                     user_api_key_dict=user_api_key_dict,
                 )
@@ -239,7 +302,17 @@ async def new_user(
                 else:
                     raise e
 
-        special_keys = ["token"]
+        user_id = cast(Optional[str], response.get("user_id", None))
+
+        if organization_ids is not None and user_id is not None:
+            await _add_user_to_organizations(
+                user_id=user_id,
+                organizations=organization_ids,
+                prisma_client=prisma_client,
+                user_api_key_dict=user_api_key_dict,
+            )
+
+        special_keys = ["token", "token_id"]
         response_dict = {}
         for key, value in response.items():
             if key in NewUserResponse.model_fields.keys() and key not in special_keys:
@@ -319,6 +392,26 @@ def get_team_from_list(
     return None
 
 
+def get_user_id_from_request(request: Request) -> Optional[str]:
+    """
+    Get the user id from the request
+    """
+    # Get the raw query string and parse it properly to handle + characters
+    user_id: Optional[str] = None
+    query_string = str(request.url.query)
+    if "user_id=" in query_string:
+        # Extract the user_id value from the raw query string
+        import re
+        from urllib.parse import unquote
+
+        match = re.search(r"user_id=([^&]*)", query_string)
+        if match:
+            # Use unquote instead of unquote_plus to preserve + characters
+            raw_user_id = unquote(match.group(1))
+            user_id = raw_user_id
+    return user_id
+
+
 @router.get(
     "/user/info",
     tags=["Internal User management"],
@@ -327,6 +420,7 @@ def get_team_from_list(
 )
 @management_endpoint_wrapper
 async def user_info(
+    request: Request,
     user_id: Optional[str] = fastapi.Query(
         default=None, description="User ID in the request parameters"
     ),
@@ -348,6 +442,12 @@ async def user_info(
     from litellm.proxy.proxy_server import prisma_client
 
     try:
+        # Handle URL encoding properly by getting user_id from the original request
+        if (
+            user_id is not None and " " in user_id
+        ):  # if user_id is not None and contains a space, get the user_id from the request - this is to handle the case where the user_id is encoded in the url
+            user_id = get_user_id_from_request(request=request)
+
         if prisma_client is None:
             raise Exception(
                 "Database not connected. Connect a database to your proxy - https://docs.litellm.ai/docs/simple_proxy#managing-auth---virtual-keys"
@@ -360,10 +460,12 @@ async def user_info(
         elif user_id is None:
             user_id = user_api_key_dict.user_id
         ## GET USER ROW ##
+
         if user_id is not None:
             user_info = await prisma_client.get_data(user_id=user_id)
         else:
             user_info = None
+
         ## GET ALL TEAMS ##
         team_list = []
         team_id_list = []
@@ -639,15 +741,10 @@ async def user_update(
         - team_id: Optional[str] - [DEPRECATED PARAM] The team id of the user. Default is None. 
         - duration: Optional[str] - [NOT IMPLEMENTED].
         - key_alias: Optional[str] - [NOT IMPLEMENTED].
-            
+        - object_permission: Optional[LiteLLM_ObjectPermissionBase] - internal user-specific object permission. Example - {"vector_stores": ["vector_store_1", "vector_store_2"]}. IF null or {} then no object permission.
     
     """
-    from litellm.proxy.proxy_server import (
-        litellm_proxy_admin_name,
-        prisma_client,
-        proxy_logging_obj,
-        user_api_key_cache,
-    )
+    from litellm.proxy.proxy_server import litellm_proxy_admin_name, prisma_client
 
     try:
         data_json: dict = data.model_dump(exclude_unset=True)
@@ -730,15 +827,6 @@ async def user_update(
 
                 user_row_litellm_typed = LiteLLM_UserTable(
                     **user_row.model_dump(exclude_none=True)
-                )
-
-                ## UPDATE CACHE ##
-                user_object_cache = UserObjectCache(
-                    user_api_key_cache=user_api_key_cache,
-                    internal_usage_cache=proxy_logging_obj.internal_usage_cache,
-                )
-                await user_object_cache.update_user_object(
-                    user_id=response["user_id"], user_object=user_row_litellm_typed
                 )
 
                 asyncio.create_task(
