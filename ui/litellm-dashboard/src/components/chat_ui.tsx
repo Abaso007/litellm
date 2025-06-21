@@ -24,10 +24,12 @@ import {
 } from "@tremor/react";
 import { v4 as uuidv4 } from 'uuid';
 
-import { message, Select, Spin, Typography, Tooltip, Input } from "antd";
+import { message, Select, Spin, Typography, Tooltip, Input, Upload } from "antd";
 import { makeOpenAIChatCompletionRequest } from "./chat_ui/llm_calls/chat_completion";
 import { makeOpenAIImageGenerationRequest } from "./chat_ui/llm_calls/image_generation";
+import { makeOpenAIImageEditsRequest } from "./chat_ui/llm_calls/image_edits";
 import { makeOpenAIResponsesRequest } from "./chat_ui/llm_calls/responses_api";
+import { makeAnthropicMessagesRequest } from "./chat_ui/llm_calls/anthropic_messages";
 import { fetchAvailableModels, ModelGroup  } from "./chat_ui/llm_calls/fetch_models";
 import { litellmModeMapping, ModelMode, EndpointType, getEndpointType } from "./chat_ui/mode_endpoint_mapping";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -52,10 +54,13 @@ import {
   TagsOutlined,
   DatabaseOutlined,
   InfoCircleOutlined,
-  SafetyOutlined
+  SafetyOutlined,
+  UploadOutlined,
+  PictureOutlined
 } from "@ant-design/icons";
 
 const { TextArea } = Input;
+const { Dragger } = Upload;
 
 interface ChatUIProps {
   accessToken: string | null;
@@ -91,6 +96,8 @@ const ChatUI: React.FC<ChatUIProps> = ({
   const [selectedVectorStores, setSelectedVectorStores] = useState<string[]>([]);
   const [selectedGuardrails, setSelectedGuardrails] = useState<string[]>([]);
   const [messageTraceId, setMessageTraceId] = useState<string | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -117,12 +124,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
         if (uniqueModels.length > 0) {
           setModelInfo(uniqueModels);
           setSelectedModel(uniqueModels[0].model_group);
-          
-          // Auto-set endpoint based on the first model's mode
-          if (uniqueModels[0].mode) {
-            const initialEndpointType = determineEndpointType(uniqueModels[0].model_group, uniqueModels);
-            setEndpointType(initialEndpointType);
-          }
+        
         }
       } catch (error) {
         console.error("Error fetching model info:", error);
@@ -288,8 +290,29 @@ const ChatUI: React.FC<ChatUIProps> = ({
     }
   };
 
+  const handleImageUpload = (file: File) => {
+    setUploadedImage(file);
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreviewUrl(previewUrl);
+    return false; // Prevent default upload behavior
+  };
+
+  const handleRemoveImage = () => {
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setUploadedImage(null);
+    setImagePreviewUrl(null);
+  };
+
   const handleSendMessage = async () => {
     if (inputMessage.trim() === "") return;
+
+    // For image edits, require both image and prompt
+    if (endpointType === EndpointType.IMAGE_EDITS && !uploadedImage) {
+      message.error("Please upload an image for editing");
+      return;
+    }
 
     if (!token || !userRole || !userID) {
       return;
@@ -349,11 +372,41 @@ const ChatUI: React.FC<ChatUIProps> = ({
             selectedTags,
             signal
           );
+        } else if (endpointType === EndpointType.IMAGE_EDITS) {
+          // For image edits
+          if (uploadedImage) {
+            await makeOpenAIImageEditsRequest(
+              uploadedImage,
+              inputMessage,
+              (imageUrl, model) => updateImageUI(imageUrl, model),
+              selectedModel,
+              effectiveApiKey,
+              selectedTags,
+              signal
+            );
+          }
         } else if (endpointType === EndpointType.RESPONSES) {
           // Create chat history for API call - strip out model field and isImage field
           const apiChatHistory = [...chatHistory.filter(msg => !msg.isImage).map(({ role, content }) => ({ role, content })), newUserMessage];
           
           await makeOpenAIResponsesRequest(
+            apiChatHistory,
+            (role, delta, model) => updateTextUI(role, delta, model),
+            selectedModel,
+            effectiveApiKey,
+            selectedTags,
+            signal,
+            updateReasoningContent,
+            updateTimingData,
+            updateUsageData,
+            traceId,
+            selectedVectorStores.length > 0 ? selectedVectorStores : undefined,
+            selectedGuardrails.length > 0 ? selectedGuardrails : undefined
+          );
+        } else if (endpointType === EndpointType.ANTHROPIC_MESSAGES) {
+          const apiChatHistory = [...chatHistory.filter(msg => !msg.isImage).map(({ role, content }) => ({ role, content })), newUserMessage];
+
+          await makeAnthropicMessagesRequest(
             apiChatHistory,
             (role, delta, model) => updateTextUI(role, delta, model),
             selectedModel,
@@ -379,6 +432,10 @@ const ChatUI: React.FC<ChatUIProps> = ({
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      // Clear image after successful request for image edits
+      if (endpointType === EndpointType.IMAGE_EDITS) {
+        handleRemoveImage();
+      }
     }
 
     setInputMessage("");
@@ -387,6 +444,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
   const clearChatHistory = () => {
     setChatHistory([]);
     setMessageTraceId(null);
+    handleRemoveImage(); // Clear any uploaded images
     message.success("Chat history cleared.");
   };
 
@@ -404,18 +462,10 @@ const ChatUI: React.FC<ChatUIProps> = ({
     console.log(`selected ${value}`);
     setSelectedModel(value);
     
-    // Use the utility function to determine the endpoint type
-    if (value !== 'custom') {
-      const newEndpointType = determineEndpointType(value, modelInfo);
-      setEndpointType(newEndpointType);
-    }
     
     setShowCustomModelInput(value === 'custom');
   };
 
-  const handleEndpointChange = (value: string) => {
-    setEndpointType(value);
-  };
 
   const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
 
@@ -498,7 +548,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
                 </Text>
                 <EndpointSelector 
                   endpointType={endpointType}
-                  onEndpointChange={handleEndpointChange}
+                  onEndpointChange={setEndpointType}
                   className="mb-4"
                 />  
               </div>
@@ -675,14 +725,54 @@ const ChatUI: React.FC<ChatUIProps> = ({
           </div>
           
           <div className="p-4 border-t border-gray-200 bg-white">
+            {/* Image Upload Section for Image Edits */}
+            {endpointType === EndpointType.IMAGE_EDITS && (
+              <div className="mb-4">
+                {!uploadedImage ? (
+                  <Dragger
+                    beforeUpload={handleImageUpload}
+                    accept="image/*"
+                    showUploadList={false}
+                    className="border-dashed border-2 border-gray-300 rounded-lg p-4"
+                  >
+                    <p className="ant-upload-drag-icon">
+                      <PictureOutlined style={{ fontSize: '24px', color: '#666' }} />
+                    </p>
+                    <p className="ant-upload-text text-sm">Click or drag image to upload</p>
+                    <p className="ant-upload-hint text-xs text-gray-500">
+                      Support for PNG, JPG, JPEG formats
+                    </p>
+                  </Dragger>
+                ) : (
+                  <div className="relative inline-block">
+                    <img 
+                      src={imagePreviewUrl || ''} 
+                      alt="Upload preview" 
+                      className="max-w-32 max-h-32 rounded-md border border-gray-200 object-cover"
+                    />
+                    <button
+                      className="absolute top-1 right-1 bg-white shadow-sm border border-gray-200 rounded px-1 py-1 text-red-500 hover:bg-red-50 text-xs"
+                      onClick={handleRemoveImage}
+                    >
+                      <DeleteOutlined />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="flex items-center">
               <TextArea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  endpointType === EndpointType.CHAT || endpointType === EndpointType.RESPONSES
-                    ? "Type your message... (Shift+Enter for new line)" 
+                  endpointType === EndpointType.CHAT ||
+                  endpointType === EndpointType.RESPONSES ||
+                  endpointType === EndpointType.ANTHROPIC_MESSAGES
+                    ? "Type your message... (Shift+Enter for new line)"
+                    : endpointType === EndpointType.IMAGE_EDITS
+                    ? "Describe how you want to edit the image..."
                     : "Describe the image you want to generate..."
                 }
                 disabled={isLoading}
@@ -702,9 +792,21 @@ const ChatUI: React.FC<ChatUIProps> = ({
                 <Button
                   onClick={handleSendMessage}
                   className="ml-2 text-white"
-                  icon={endpointType === EndpointType.CHAT ? SendOutlined : RobotOutlined}
+                  icon={
+                    endpointType === EndpointType.CHAT ||
+                    endpointType === EndpointType.RESPONSES ||
+                    endpointType === EndpointType.ANTHROPIC_MESSAGES
+                      ? SendOutlined
+                      : RobotOutlined
+                  }
                 >
-                  {endpointType === EndpointType.CHAT ? "Send" : "Generate"}
+                  {endpointType === EndpointType.CHAT ||
+                  endpointType === EndpointType.RESPONSES ||
+                  endpointType === EndpointType.ANTHROPIC_MESSAGES
+                    ? "Send"
+                    : endpointType === EndpointType.IMAGE_EDITS
+                    ? "Edit"
+                    : "Generate"}
                 </Button>
               )}
             </div>
