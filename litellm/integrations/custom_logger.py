@@ -16,7 +16,6 @@ from typing import (
 from pydantic import BaseModel
 
 from litellm.caching.caching import DualCache
-from litellm.proxy._types import UserAPIKeyAuth
 from litellm.types.integrations.argilla import ArgillaItem
 from litellm.types.llms.openai import AllMessageValues, ChatCompletionRequest
 from litellm.types.utils import (
@@ -33,11 +32,13 @@ if TYPE_CHECKING:
     from opentelemetry.trace import Span as _Span
 
     from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
+    from litellm.proxy._types import UserAPIKeyAuth
 
     Span = Union[_Span, Any]
 else:
     Span = Any
     LiteLLMLoggingObj = Any
+    UserAPIKeyAuth = Any
 
 
 class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callback#callback-class
@@ -87,6 +88,7 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
         dynamic_callback_params: StandardCallbackDynamicParams,
         litellm_logging_obj: LiteLLMLoggingObj,
         tools: Optional[List[Dict]] = None,
+        prompt_label: Optional[str] = None,
     ) -> Tuple[str, List[AllMessageValues], dict]:
         """
         Returns:
@@ -104,6 +106,7 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
         prompt_id: Optional[str],
         prompt_variables: Optional[dict],
         dynamic_callback_params: StandardCallbackDynamicParams,
+        prompt_label: Optional[str] = None,
     ) -> Tuple[str, List[AllMessageValues], dict]:
         """
         Returns:
